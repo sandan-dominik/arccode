@@ -7,6 +7,17 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import { PublisherGithub } from '@electron-forge/publisher-github';
+import path from 'node:path';
+import fs from 'node:fs';
+
+function copyNativeModules(buildPath: string) {
+  const srcNodePty = path.join(__dirname, 'node_modules', 'node-pty');
+  const destNodeModules = path.join(buildPath, 'resources', 'app.asar.unpacked', 'node_modules');
+  const destNodePty = path.join(destNodeModules, 'node-pty');
+
+  fs.mkdirSync(destNodeModules, { recursive: true });
+  fs.cpSync(srcNodePty, destNodePty, { recursive: true });
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -16,6 +27,13 @@ const config: ForgeConfig = {
     icon: './assets/icon',
   },
   rebuildConfig: {},
+  hooks: {
+    postPackage: async (_config, options) => {
+      for (const outputPath of options.outputPaths) {
+        copyNativeModules(outputPath);
+      }
+    },
+  },
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ['darwin']),
@@ -64,8 +82,8 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
+      [FuseV1Options.OnlyLoadAppFromAsar]: false,
     }),
   ],
 };

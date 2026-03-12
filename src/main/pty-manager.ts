@@ -1,7 +1,22 @@
-import * as pty from 'node-pty';
+import { app } from 'electron';
+import path from 'node:path';
 import { findGitBash } from './git-bash';
 
-const ptys = new Map<string, pty.IPty>();
+// In production, node-pty lives in app.asar.unpacked/node_modules
+// In dev, normal require resolution works
+function loadNodePty() {
+  if (app.isPackaged) {
+    const unpackedPath = path.join(path.dirname(app.getAppPath()), 'app.asar.unpacked', 'node_modules', 'node-pty');
+    return require(unpackedPath);
+  }
+  return require('node-pty');
+}
+
+const pty = loadNodePty();
+
+import type { IPty } from 'node-pty';
+
+const ptys = new Map<string, IPty>();
 let nextId = 1;
 
 export function createPty(
