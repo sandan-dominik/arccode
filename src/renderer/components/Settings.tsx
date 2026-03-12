@@ -1,0 +1,322 @@
+import { useState } from 'react';
+import type { ThemeMode, ClaudeMode, OpenDefault } from '../types';
+
+const SHELL_PRESETS: { name: string; path: string; args: string[] }[] = [
+  { name: 'Git Bash', path: '', args: [] },
+  { name: 'PowerShell', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', args: [] },
+  { name: 'CMD', path: 'C:\\Windows\\System32\\cmd.exe', args: [] },
+  { name: 'WSL', path: 'C:\\Windows\\System32\\wsl.exe', args: [] },
+];
+
+interface SettingsProps {
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+  terminalBgColor: string;
+  onTerminalBgColorChange: (color: string) => void;
+  shellPath: string;
+  shellArgs: string[];
+  onShellConfigChange: (path: string, args: string[]) => void;
+  claudeDefault: ClaudeMode;
+  onClaudeDefaultChange: (mode: ClaudeMode) => void;
+  openDefault: OpenDefault;
+  onOpenDefaultChange: (mode: OpenDefault) => void;
+  onClose: () => void;
+}
+
+const toggleBtnStyle = (active: boolean) => ({
+  fontSize: 11,
+  padding: '4px 10px',
+  borderRadius: 4,
+  border: '1px solid var(--border)',
+  background: active ? 'var(--badge-bg)' : 'var(--bg-surface)',
+  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+  fontWeight: active ? 600 : 400,
+});
+
+export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgColorChange, shellPath, shellArgs, onShellConfigChange, claudeDefault, onClaudeDefaultChange, openDefault, onOpenDefaultChange, onClose }: SettingsProps) {
+  const [customPath, setCustomPath] = useState(shellPath);
+  return (
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      background: 'var(--bg-primary)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        height: 40,
+        padding: '0 16px',
+        borderBottom: '1px solid var(--border)',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Settings</span>
+        <button onClick={onClose} style={{ fontSize: 16, color: 'var(--text-muted)' }}>x</button>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+        {/* Appearance */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+            marginBottom: 12,
+          }}>
+            Appearance
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onThemeChange('dark')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                borderRadius: 8,
+                border: theme === 'dark' ? '2px solid var(--text-secondary)' : '2px solid var(--border)',
+                background: 'var(--bg-surface)',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 32,
+                borderRadius: 4,
+                background: '#1a191a',
+                border: '1px solid #333',
+              }} />
+              <span style={{
+                fontSize: 12,
+                color: theme === 'dark' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: theme === 'dark' ? 600 : 400,
+              }}>
+                Dark
+              </span>
+            </button>
+
+            <button
+              onClick={() => onThemeChange('light')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                borderRadius: 8,
+                border: theme === 'light' ? '2px solid var(--text-secondary)' : '2px solid var(--border)',
+                background: 'var(--bg-surface)',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 32,
+                borderRadius: 4,
+                background: '#fafafa',
+                border: '1px solid #ddd',
+              }} />
+              <span style={{
+                fontSize: 12,
+                color: theme === 'light' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: theme === 'light' ? 600 : 400,
+              }}>
+                Light
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Terminal */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+            marginBottom: 12,
+          }}>
+            Terminal
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              Background Color
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="color"
+                value={terminalBgColor}
+                onChange={(e) => onTerminalBgColorChange(e.target.value)}
+                style={{
+                  width: 32,
+                  height: 24,
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  padding: 0,
+                  cursor: 'pointer',
+                  background: 'none',
+                }}
+              />
+              <input
+                type="text"
+                value={terminalBgColor}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    onTerminalBgColorChange(v);
+                  }
+                }}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    onTerminalBgColorChange(v);
+                  }
+                }}
+                style={{
+                  width: 80,
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'Cascadia Code', 'Fira Code', monospace",
+                }}
+              />
+              <button
+                onClick={() => onTerminalBgColorChange('#171717')}
+                style={{
+                  fontSize: 11,
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* Shell Path */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Shell
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {SHELL_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    onClick={() => {
+                      setCustomPath(preset.path);
+                      onShellConfigChange(preset.path, preset.args);
+                    }}
+                    style={toggleBtnStyle((shellPath || '') === preset.path)}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="text"
+                value={customPath}
+                placeholder="Auto-detect (Git Bash)"
+                onChange={(e) => setCustomPath(e.target.value)}
+                onBlur={() => onShellConfigChange(customPath, shellArgs)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onShellConfigChange(customPath, shellArgs); }}
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  padding: '5px 8px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'Cascadia Code', 'Fira Code', monospace",
+                }}
+              />
+              <button
+                onClick={async () => {
+                  const file = await window.electronAPI.dialog.openFile();
+                  if (file) {
+                    setCustomPath(file);
+                    onShellConfigChange(file, shellArgs);
+                  }
+                }}
+                style={{
+                  fontSize: 11,
+                  padding: '5px 10px',
+                  borderRadius: 4,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Browse
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+              New sessions will use this shell. Existing sessions keep their current shell.
+            </div>
+          </div>
+        </div>
+
+        {/* Defaults */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+            marginBottom: 12,
+          }}>
+            Defaults
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 100 }}>
+              Claude Button
+            </label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => onClaudeDefaultChange('claude')} style={toggleBtnStyle(claudeDefault === 'claude')}>
+                claude
+              </button>
+              <button onClick={() => onClaudeDefaultChange('claude-yolo')} style={toggleBtnStyle(claudeDefault === 'claude-yolo')}>
+                claude --dangerously-skip-permissions
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 100 }}>
+              Open Button
+            </label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => onOpenDefaultChange('cursor')} style={toggleBtnStyle(openDefault === 'cursor')}>
+                Cursor
+              </button>
+              <button onClick={() => onOpenDefaultChange('explorer')} style={toggleBtnStyle(openDefault === 'explorer')}>
+                Explorer
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
