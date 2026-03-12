@@ -5,7 +5,6 @@ Multi-terminal manager for Windows that organizes terminals by project and sessi
 ## Features
 
 - **Project-based organization** — Group terminal sessions under project folders
-- **Multiple layouts** — Single, horizontal split, vertical split, 3-pane, and 2x2 grid
 - **Activity tracking** — Visual indicators for session state (idle, completed, busy, serving)
 - **Dev server detection** — Automatically detects `localhost` URLs from terminal output and offers "Open in Browser"
 - **Script runner** — Run package.json scripts directly from the toolbar with auto-detected package manager
