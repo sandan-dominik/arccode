@@ -124,7 +124,6 @@ export function Sidebar({
 
       {/* Settings button */}
       <div style={{
-        borderTop: '1px solid var(--border)',
         padding: '8px 14px',
       }}>
         <button

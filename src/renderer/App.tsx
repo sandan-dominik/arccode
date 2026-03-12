@@ -225,7 +225,7 @@ export function App() {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-primary)', visibility: showSettings ? 'hidden' : 'visible' }}>
-              <HeaderBar
+              {store.activeSessionId && <HeaderBar
                 projectName={store.activeProject?.name || null}
                 projectPath={store.activeProject?.path || null}
                 sessionName={store.activeSession?.name || null}
@@ -260,7 +260,7 @@ export function App() {
                   ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
                   : null
                 }
-              />
+              />}
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 {[...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => (
                   <div

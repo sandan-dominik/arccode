@@ -180,11 +180,7 @@ export function HeaderBar({
           >
             {sessionName}
           </span>
-        ) : (
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            New thread
-          </span>
-        )}
+        ) : null}
 
         {projectName && (
           <span style={{
