@@ -65,6 +65,11 @@ export interface ElectronAPI {
   app: {
     getVersion: () => string;
   };
+  updater: {
+    check: () => void;
+    install: () => void;
+    onStatus: (callback: (status: 'downloading' | 'ready' | 'up-to-date' | 'error') => void) => () => void;
+  };
 }
 
 declare global {

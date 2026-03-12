@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { Project } from '../types';
 import { ProjectItem } from './ProjectItem';
 
@@ -138,9 +139,14 @@ export function Sidebar({
         ))}
       </div>
 
-      {/* Settings button */}
+      {/* Update + Settings buttons */}
       <div style={{
         padding: '8px 14px',
+      }}>
+        <UpdateButton />
+      </div>
+      <div style={{
+        padding: '0 14px 8px',
       }}>
         <button
           onClick={onOpenSettings}
@@ -163,5 +169,44 @@ export function Sidebar({
         </button>
       </div>
     </div>
+  );
+}
+
+function UpdateButton() {
+  const [status, setStatus] = useState<'idle' | 'downloading' | 'ready' | 'up-to-date' | 'error'>('idle');
+
+  useEffect(() => {
+    const removeListener = window.electronAPI.updater.onStatus((s) => {
+      setStatus(s);
+    });
+    // Check on mount
+    window.electronAPI.updater.check();
+    return removeListener;
+  }, []);
+
+  if (status !== 'downloading' && status !== 'ready') return null;
+
+  return (
+    <button
+      onClick={() => {
+        if (status === 'ready') {
+          window.electronAPI.updater.install();
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 0',
+        color: status === 'ready' ? 'var(--success)' : 'var(--text-muted)',
+        fontSize: 12,
+        width: '100%',
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+        <path d="M8 2v9M5 8l3 3 3-3M3 13h10" />
+      </svg>
+      {status === 'downloading' ? 'Downloading update...' : 'Update available — click to restart'}
+    </button>
   );
 }

@@ -39,6 +39,19 @@ const api: ElectronAPI = {
   app: {
     getVersion: () => ipcRenderer.sendSync('app:getVersion'),
   },
+  updater: {
+    check: () => ipcRenderer.send('updater:check'),
+    install: () => ipcRenderer.send('updater:install'),
+    onStatus: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: 'downloading' | 'ready' | 'up-to-date' | 'error') => {
+        callback(status);
+      };
+      ipcRenderer.on('updater:status', handler);
+      return () => {
+        ipcRenderer.removeListener('updater:status', handler);
+      };
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

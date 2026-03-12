@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu, autoUpdater } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -6,13 +6,9 @@ import started from 'electron-squirrel-startup';
 import { createPty, writePty, resizePty, killPty, killAll } from './pty-manager';
 import { loadStore, saveStore } from './store';
 
-import { updateElectronApp } from 'update-electron-app';
-
 if (started) {
   app.quit();
 }
-
-updateElectronApp();
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'assets', privileges: { bypassCSP: true, supportFetchAPI: true } },
@@ -157,6 +153,67 @@ function setupIPC() {
   });
 }
 
+// --- Auto-updater ---
+function setupUpdater() {
+  if (!app.isPackaged) return; // Skip in dev mode
+
+  const repo = 'sandan-dominik/arccode';
+  const feedURL = `https://update.electronjs.org/${repo}/${process.platform}-${process.arch}/${app.getVersion()}`;
+
+  try {
+    autoUpdater.setFeedURL({ url: feedURL });
+  } catch {
+    return;
+  }
+
+  autoUpdater.on('update-available', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', 'downloading');
+    }
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', 'ready');
+    }
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', 'up-to-date');
+    }
+  });
+
+  autoUpdater.on('error', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', 'error');
+    }
+  });
+
+  // Check for updates on IPC request
+  ipcMain.on('updater:check', () => {
+    try {
+      autoUpdater.checkForUpdates();
+    } catch {
+      // Feed URL not set or network error
+    }
+  });
+
+  // Quit and install on IPC request
+  ipcMain.on('updater:install', () => {
+    autoUpdater.quitAndInstall();
+  });
+
+  // Auto-check on startup after a short delay
+  setTimeout(() => {
+    try {
+      autoUpdater.checkForUpdates();
+    } catch {
+      // ignore
+    }
+  }, 5000);
+}
+
 app.on('ready', () => {
   // Set GPU cache path to avoid "Unable to move the cache" errors on Windows
   try {
@@ -175,6 +232,7 @@ app.on('ready', () => {
   });
   setupIPC();
   createWindow();
+  setupUpdater();
 });
 
 app.on('before-quit', () => {
