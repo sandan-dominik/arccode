@@ -9,6 +9,8 @@ interface TerminalPaneProps {
   isActive?: boolean;
   shellPath?: string;
   shellArgs?: string[];
+  autoCopy?: boolean;
+  rightClickPaste?: boolean;
 }
 
 export interface TerminalPaneHandle {
@@ -16,9 +18,9 @@ export interface TerminalPaneHandle {
   focus: () => void;
 }
 
-export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(function TerminalPane({ cwd, onData, onPtyOutput, bgColor, isActive, shellPath, shellArgs }, ref) {
+export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(function TerminalPane({ cwd, onData, onPtyOutput, bgColor, isActive, shellPath, shellArgs, autoCopy, rightClickPaste }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { focus, write } = useTerminal(containerRef, { cwd, onData, onPtyOutput, bgColor, shellPath, shellArgs });
+  const { focus, write } = useTerminal(containerRef, { cwd, onData, onPtyOutput, bgColor, shellPath, shellArgs, autoCopy, rightClickPaste });
 
   useImperativeHandle(ref, () => ({ write, focus }), [write, focus]);
 

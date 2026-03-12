@@ -12,7 +12,7 @@ interface SessionItemProps {
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDrop: (index: number) => void;
   dropTarget: 'above' | 'below' | null;
-  activity: 'idle' | 'completed' | 'busy' | 'serving' | null;
+  activity: 'idle' | 'completed' | 'busy' | 'serving' | 'error' | null;
   serverUrl: string | null;
 }
 
@@ -151,6 +151,21 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
             marginRight: 10,
           }}
           title="Server running"
+        />
+      )}
+      {activity === 'error' && (
+        <span
+          style={{
+            display: 'inline-block',
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: 'var(--danger)',
+            flexShrink: 0,
+            marginTop: 4,
+            marginRight: 10,
+          }}
+          title="Error"
         />
       )}
       <div style={{ minWidth: 0, flex: 1 }}>

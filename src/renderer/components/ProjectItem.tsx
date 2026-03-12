@@ -11,7 +11,7 @@ interface ProjectItemProps {
   onRemoveProject: () => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
-  sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving'>;
+  sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
 }
 

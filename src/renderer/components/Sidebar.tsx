@@ -11,7 +11,7 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
-  sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving'>;
+  sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
   onOpenSettings: () => void;
 }
@@ -44,7 +44,7 @@ export function Sidebar({
         padding: '14px 14px 10px',
         display: 'flex',
         alignItems: 'baseline',
-        gap: 6,
+        justifyContent: 'space-between',
       }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
           ArcCode
@@ -56,7 +56,7 @@ export function Sidebar({
           textTransform: 'uppercase',
           letterSpacing: 1,
         }}>
-          ALPHA
+          ALPHA | v{window.electronAPI.app.getVersion()}
         </span>
       </div>
 

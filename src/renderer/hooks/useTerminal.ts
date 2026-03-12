@@ -11,6 +11,8 @@ interface UseTerminalOptions {
   bgColor?: string;
   shellPath?: string;
   shellArgs?: string[];
+  autoCopy?: boolean;
+  rightClickPaste?: boolean;
 }
 
 export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>, options: UseTerminalOptions = {}) {
@@ -117,9 +119,28 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
       }
     });
 
-    // Right-click context menu for copy/paste
+    // Auto-copy on selection
+    const selectionDisposable = term.onSelectionChange(() => {
+      if (optionsRef.current.autoCopy) {
+        const selection = term.getSelection();
+        if (selection) {
+          navigator.clipboard.writeText(selection);
+        }
+      }
+    });
+
+    // Right-click context menu or direct paste
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+
+      if (optionsRef.current.rightClickPaste) {
+        // Direct paste, skip context menu
+        navigator.clipboard.readText().then((text) => {
+          if (ptyIdRef.current && text) window.electronAPI.pty.write(ptyIdRef.current, text);
+        });
+        return;
+      }
+
       const selection = term.getSelection();
       const menu = document.createElement('div');
       menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;padding:4px 0;z-index:1000;min-width:120px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
@@ -205,6 +226,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
       clearTimeout(resizeTimer);
       removeDataListener();
       inputDisposable.dispose();
+      selectionDisposable.dispose();
       container.removeEventListener('contextmenu', handleContextMenu);
       if (ptyIdRef.current) {
         window.electronAPI.pty.kill(ptyIdRef.current);

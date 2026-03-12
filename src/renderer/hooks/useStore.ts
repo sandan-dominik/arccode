@@ -15,6 +15,8 @@ export function useStore() {
   const [shellArgs, setShellArgsState] = useState<string[]>([]);
   const [claudeDefault, setClaudeDefaultState] = useState<ClaudeMode>('claude');
   const [openDefault, setOpenDefaultState] = useState<OpenDefault>('cursor');
+  const [autoCopy, setAutoCopyState] = useState<boolean>(false);
+  const [rightClickPaste, setRightClickPasteState] = useState<boolean>(false);
 
   // Load on mount
   useEffect(() => {
@@ -29,6 +31,8 @@ export function useStore() {
       if (data.shellArgs) setShellArgsState(data.shellArgs);
       if (data.claudeDefault) setClaudeDefaultState(data.claudeDefault);
       if (data.openDefault) setOpenDefaultState(data.openDefault);
+      if (data.autoCopy != null) setAutoCopyState(data.autoCopy);
+      if (data.rightClickPaste != null) setRightClickPasteState(data.rightClickPaste);
     });
   }, []);
 
@@ -48,6 +52,10 @@ export function useStore() {
   claudeDefaultRef.current = claudeDefault;
   const openDefaultRef = useRef(openDefault);
   openDefaultRef.current = openDefault;
+  const autoCopyRef = useRef(autoCopy);
+  autoCopyRef.current = autoCopy;
+  const rightClickPasteRef = useRef(rightClickPaste);
+  rightClickPasteRef.current = rightClickPaste;
 
   const persist = useCallback((newProjects: Project[], newActiveId: string | null, newTheme?: ThemeMode, newBgColor?: string, newOpenedIds?: string[]) => {
     const data: StoreData = {
@@ -60,6 +68,8 @@ export function useStore() {
       shellArgs: shellArgsRef.current.length ? shellArgsRef.current : undefined,
       claudeDefault: claudeDefaultRef.current,
       openDefault: openDefaultRef.current,
+      autoCopy: autoCopyRef.current,
+      rightClickPaste: rightClickPasteRef.current,
     };
     window.electronAPI.store.save(data);
   }, []);
@@ -111,6 +121,18 @@ export function useStore() {
   const setOpenDefault = useCallback((mode: OpenDefault) => {
     setOpenDefaultState(mode);
     openDefaultRef.current = mode;
+    persist(projects, activeSessionId, theme, terminalBgColor);
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const setAutoCopy = useCallback((enabled: boolean) => {
+    setAutoCopyState(enabled);
+    autoCopyRef.current = enabled;
+    persist(projects, activeSessionId, theme, terminalBgColor);
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const setRightClickPaste = useCallback((enabled: boolean) => {
+    setRightClickPasteState(enabled);
+    rightClickPasteRef.current = enabled;
     persist(projects, activeSessionId, theme, terminalBgColor);
   }, [projects, activeSessionId, theme, terminalBgColor, persist]);
 
@@ -274,6 +296,10 @@ export function useStore() {
     setClaudeDefault,
     openDefault,
     setOpenDefault,
+    autoCopy,
+    setAutoCopy,
+    rightClickPaste,
+    setRightClickPaste,
     addProject,
     removeProject,
     addSession,

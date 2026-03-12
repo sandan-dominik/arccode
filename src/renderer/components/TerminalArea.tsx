@@ -15,12 +15,14 @@ interface TerminalAreaProps {
   isActive?: boolean;
   shellPath?: string;
   shellArgs?: string[];
+  autoCopy?: boolean;
+  rightClickPaste?: boolean;
 }
 
-export const TerminalArea = forwardRef<TerminalPaneHandle, TerminalAreaProps>(function TerminalArea({ layout, cwd, sessionId, onTerminalData, onPtyOutput, bgColor, isActive, shellPath, shellArgs }, ref) {
+export const TerminalArea = forwardRef<TerminalPaneHandle, TerminalAreaProps>(function TerminalArea({ layout, cwd, sessionId, onTerminalData, onPtyOutput, bgColor, isActive, shellPath, shellArgs, autoCopy, rightClickPaste }, ref) {
   return (
     <div style={{ width: '100%', height: '100%' }}>
-      <LayoutRenderer ref={ref} layout={layout} cwd={cwd} onData={onTerminalData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} />
+      <LayoutRenderer ref={ref} layout={layout} cwd={cwd} onData={onTerminalData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} autoCopy={autoCopy} rightClickPaste={rightClickPaste} />
     </div>
   );
 });
@@ -34,37 +36,40 @@ interface LayoutRendererProps {
   isActive?: boolean;
   shellPath?: string;
   shellArgs?: string[];
+  autoCopy?: boolean;
+  rightClickPaste?: boolean;
 }
 
-const LayoutRenderer = forwardRef<TerminalPaneHandle, LayoutRendererProps>(function LayoutRenderer({ layout, cwd, onData, onPtyOutput, bgColor, isActive, shellPath, shellArgs }, ref) {
+const LayoutRenderer = forwardRef<TerminalPaneHandle, LayoutRendererProps>(function LayoutRenderer({ layout, cwd, onData, onPtyOutput, bgColor, isActive, shellPath, shellArgs, autoCopy, rightClickPaste }, ref) {
+  const cp = { autoCopy, rightClickPaste };
   switch (layout) {
     case 'single':
-      return <TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} />;
+      return <TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} {...cp} />;
 
     case 'hsplit':
       return (
         <Allotment vertical>
-          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
-          <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
+          <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
         </Allotment>
       );
 
     case 'vsplit':
       return (
         <Allotment>
-          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
-          <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
+          <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
         </Allotment>
       );
 
     case 'three':
       return (
         <Allotment>
-          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+          <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
           <Allotment.Pane>
             <Allotment vertical>
-              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
-              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
             </Allotment>
           </Allotment.Pane>
         </Allotment>
@@ -75,14 +80,14 @@ const LayoutRenderer = forwardRef<TerminalPaneHandle, LayoutRendererProps>(funct
         <Allotment vertical>
           <Allotment.Pane>
             <Allotment>
-              <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
-              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane ref={ref} cwd={cwd} onData={onData} onPtyOutput={onPtyOutput} bgColor={bgColor} isActive={isActive} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
             </Allotment>
           </Allotment.Pane>
           <Allotment.Pane>
             <Allotment>
-              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
-              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
+              <Allotment.Pane><TerminalPane cwd={cwd} bgColor={bgColor} shellPath={shellPath} shellArgs={shellArgs} {...cp} /></Allotment.Pane>
             </Allotment>
           </Allotment.Pane>
         </Allotment>

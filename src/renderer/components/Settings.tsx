@@ -20,6 +20,10 @@ interface SettingsProps {
   onClaudeDefaultChange: (mode: ClaudeMode) => void;
   openDefault: OpenDefault;
   onOpenDefaultChange: (mode: OpenDefault) => void;
+  autoCopy: boolean;
+  onAutoCopyChange: (enabled: boolean) => void;
+  rightClickPaste: boolean;
+  onRightClickPasteChange: (enabled: boolean) => void;
   onClose: () => void;
 }
 
@@ -33,7 +37,7 @@ const toggleBtnStyle = (active: boolean) => ({
   fontWeight: active ? 600 : 400,
 });
 
-export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgColorChange, shellPath, shellArgs, onShellConfigChange, claudeDefault, onClaudeDefaultChange, openDefault, onOpenDefaultChange, onClose }: SettingsProps) {
+export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgColorChange, shellPath, shellArgs, onShellConfigChange, claudeDefault, onClaudeDefaultChange, openDefault, onOpenDefaultChange, autoCopy, onAutoCopyChange, rightClickPaste, onRightClickPasteChange, onClose }: SettingsProps) {
   const [customPath, setCustomPath] = useState(shellPath);
   return (
     <div style={{
@@ -271,6 +275,39 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
               New sessions will use this shell. Existing sessions keep their current shell.
+            </div>
+          </div>
+
+          {/* Copy / Paste */}
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 140 }}>
+                Auto Copy on Select
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => onAutoCopyChange(true)} style={toggleBtnStyle(autoCopy)}>
+                  On
+                </button>
+                <button onClick={() => onAutoCopyChange(false)} style={toggleBtnStyle(!autoCopy)}>
+                  Off
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 140 }}>
+                Right Click to Paste
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => onRightClickPasteChange(true)} style={toggleBtnStyle(rightClickPaste)}>
+                  On
+                </button>
+                <button onClick={() => onRightClickPasteChange(false)} style={toggleBtnStyle(!rightClickPaste)}>
+                  Off
+                </button>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              When enabled, selecting text auto-copies it and right-click pastes directly (skipping the context menu).
             </div>
           </div>
         </div>

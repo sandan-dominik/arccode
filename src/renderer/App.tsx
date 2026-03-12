@@ -13,39 +13,49 @@ export function App() {
   useEffect(() => { (document.activeElement as HTMLElement)?.blur(); }, []);
 
   const store = useStore();
-  const inputBufferRef = useRef('');
+  const inputBufferRef = useRef<Record<string, string>>({});
   const [showSettings, setShowSettings] = useState(false);
-  const [sessionActivity, setSessionActivity] = useState<Record<string, 'idle' | 'completed' | 'busy' | 'serving'>>({});
+  type ActivityState = 'idle' | 'completed' | 'busy' | 'serving' | 'error';
+  const [sessionActivity, setSessionActivity] = useState<Record<string, ActivityState>>({});
   const activityTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const idleDecayTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const activityRef = useRef<Record<string, 'idle' | 'completed' | 'busy' | 'serving'>>({});
+  const activityRef = useRef<Record<string, ActivityState>>({});
   const busySinceRef = useRef<Record<string, number>>({});
   const [sessionServerUrls, setSessionServerUrls] = useState<Record<string, string>>({});
   const serverUrlFoundRef = useRef<Record<string, boolean>>({});
-  const activitySuppressUntilRef = useRef<Record<string, number>>({});
+  const chimeSuppressUntilRef = useRef<Record<string, number>>({});
   const terminalRefs = useRef<Record<string, React.RefObject<TerminalPaneHandle | null>>>({});
 
-  // Set all opened sessions to 'idle' (gray dot). They stay gray until selected.
-  const initSession = useCallback((sessionId: string) => {
-    if (activityRef.current[sessionId]) return;
-    activityRef.current[sessionId] = 'idle';
-    setSessionActivity((prev) => ({ ...prev, [sessionId]: 'idle' }));
+  // How long after last PTY output before we consider a command "done"
+  const OUTPUT_GAP_MS = 2000;
+  // How long "completed" (green) stays before decaying to idle (gray)
+  const COMPLETED_DECAY_MS = 60_000;
+  // Minimum busy duration before playing completion chime
+  const CHIME_MIN_BUSY_MS = 5000;
+
+  const setActivity = useCallback((sessionId: string, state: ActivityState) => {
+    activityRef.current[sessionId] = state;
+    setSessionActivity((prev) => ({ ...prev, [sessionId]: state }));
   }, []);
 
+  // Initialize opened sessions to 'idle'
   useEffect(() => {
     for (const id of store.openedSessionIds) {
-      initSession(id);
+      if (!activityRef.current[id]) {
+        activityRef.current[id] = 'idle';
+        setSessionActivity((prev) => ({ ...prev, [id]: 'idle' }));
+      }
     }
-  }, [store.openedSessionIds, initSession]);
+  }, [store.openedSessionIds]);
 
   // Suppress chime briefly on tab switch (resize causes PTY redraw)
   const prevActiveSessionRef = useRef<string | null>(null);
   useEffect(() => {
     if (store.activeSessionId && store.activeSessionId !== prevActiveSessionRef.current) {
-      const now = Date.now() + 3000;
-      activitySuppressUntilRef.current[store.activeSessionId] = now;
+      const until = Date.now() + 3000;
+      chimeSuppressUntilRef.current[store.activeSessionId] = until;
       if (prevActiveSessionRef.current) {
-        activitySuppressUntilRef.current[prevActiveSessionRef.current] = now;
+        chimeSuppressUntilRef.current[prevActiveSessionRef.current] = until;
       }
     }
     prevActiveSessionRef.current = store.activeSessionId;
@@ -54,7 +64,6 @@ export function App() {
   const playDoneSound = useCallback(() => {
     try {
       const ctx = new AudioContext();
-      // Two-tone chime
       const playTone = (freq: number, start: number, duration: number) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -75,15 +84,17 @@ export function App() {
   }, []);
 
   const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
+  // Detect crash/error patterns in PTY output (case-insensitive, stripped of ANSI codes)
+  const ERROR_RE = /\b(ERROR|FATAL|ELIFECYCLE|SIGABRT|SIGSEGV|panic:|Traceback \(most recent|Unhandled rejection|Cannot find module|segmentation fault|core dumped|ENOSPC|ENOMEM)\b|npm ERR!|error Command failed/i;
+  const errorDetectedRef = useRef<Record<string, boolean>>({});
 
+  // ── PTY output handler ──
+  // Strategy: every output chunk resets a 2s debounce timer.
+  // When no output arrives for 2s → busy transitions to completed (or error if errors were seen).
+  // completed/error does NOT transition back to busy on output — only on explicit user action.
   const handlePtyOutput = useCallback((sessionId: string, data: string) => {
-    initSession(sessionId);
-
-    // While starting, ignore activity tracking
-    if (activityRef.current[sessionId] === 'idle') return;
-
-    const chimesSuppressed = Date.now() < (activitySuppressUntilRef.current[sessionId] || 0);
     const currentState = activityRef.current[sessionId];
+    if (!currentState) return;
 
     // Scan for localhost URLs to auto-detect server mode
     if (!serverUrlFoundRef.current[sessionId]) {
@@ -92,64 +103,78 @@ export function App() {
         const url = match[0].replace('0.0.0.0', 'localhost');
         serverUrlFoundRef.current[sessionId] = true;
         setSessionServerUrls((prev) => ({ ...prev, [sessionId]: url }));
-        activityRef.current[sessionId] = 'serving';
-        setSessionActivity((prev) => ({ ...prev, [sessionId]: 'serving' }));
+        setActivity(sessionId, 'serving');
         clearTimeout(activityTimers.current[sessionId]);
         return;
       }
     }
 
-    // If already serving, just cancel any pending timer — stay serving, no chime
-    if (currentState === 'serving') {
-      clearTimeout(activityTimers.current[sessionId]);
-      return;
-    }
-
-    // Only track output for sessions already in 'busy' state.
-    // Transitions to busy happen explicitly (Enter key, script run, Claude button)
-    // so shell echo from typing won't trigger a false busy state.
+    // Only track output for 'busy' sessions. All other states ignore output.
     if (currentState !== 'busy') return;
 
-    clearTimeout(idleDecayTimers.current[sessionId]);
+    // Scan for error patterns (strip ANSI escape codes first)
+    if (!errorDetectedRef.current[sessionId]) {
+      // eslint-disable-next-line no-control-regex
+      const plain = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+      if (ERROR_RE.test(plain)) {
+        errorDetectedRef.current[sessionId] = true;
+      }
+    }
+
+    // Reset the "output gap" timer — command is still producing output
     clearTimeout(activityTimers.current[sessionId]);
     activityTimers.current[sessionId] = setTimeout(() => {
-      const wasBusy = activityRef.current[sessionId] === 'busy';
+      delete activityTimers.current[sessionId];
+      if (activityRef.current[sessionId] !== 'busy') return;
+
+      const hadError = errorDetectedRef.current[sessionId];
+      const finalState = hadError ? 'error' : 'completed';
       const busyDuration = Date.now() - (busySinceRef.current[sessionId] || 0);
-      activityRef.current[sessionId] = 'completed';
-      setSessionActivity((prev) => ({ ...prev, [sessionId]: 'completed' }));
-      if (wasBusy && busyDuration > 5000 && !chimesSuppressed) {
+      setActivity(sessionId, finalState);
+
+      // Play chime if command ran long enough and chimes aren't suppressed
+      const chimesSuppressed = Date.now() < (chimeSuppressUntilRef.current[sessionId] || 0);
+      if (busyDuration > CHIME_MIN_BUSY_MS && !chimesSuppressed) {
         playDoneSound();
       }
-      // After 10 min of completed, decay back to idle (gray)
+
+      // Decay completed/error → idle after a while
+      clearTimeout(idleDecayTimers.current[sessionId]);
       idleDecayTimers.current[sessionId] = setTimeout(() => {
-        if (activityRef.current[sessionId] === 'completed') {
-          activityRef.current[sessionId] = 'idle';
-          setSessionActivity((prev) => ({ ...prev, [sessionId]: 'idle' }));
+        const s = activityRef.current[sessionId];
+        if (s === 'completed' || s === 'error') {
+          setActivity(sessionId, 'idle');
         }
-      }, 10 * 60 * 1000);
-    }, 5000);
-  }, [playDoneSound, initSession]);
+      }, COMPLETED_DECAY_MS);
+    }, OUTPUT_GAP_MS);
+  }, [playDoneSound, setActivity]);
 
   const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview)$/;
   const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview)$|electron-forge\s+start/;
 
+  // ── Transition to busy ──
+  // Called when the user explicitly starts a command (Enter key or button click).
+  const markBusy = useCallback((sessionId: string) => {
+    clearTimeout(activityTimers.current[sessionId]);
+    delete activityTimers.current[sessionId];
+    clearTimeout(idleDecayTimers.current[sessionId]);
+    errorDetectedRef.current[sessionId] = false;
+    busySinceRef.current[sessionId] = Date.now();
+    setActivity(sessionId, 'busy');
+  }, [setActivity]);
+
   const handleRunScript = useCallback((sessionId: string, scriptName: string, cmd: string) => {
-    // If it's a server-like script, pre-set serving mode immediately
     if (SERVER_SCRIPT_NAMES.test(scriptName)) {
-      activityRef.current[sessionId] = 'serving';
-      setSessionActivity((prev) => ({ ...prev, [sessionId]: 'serving' }));
+      setActivity(sessionId, 'serving');
     } else {
-      activityRef.current[sessionId] = 'busy';
-      busySinceRef.current[sessionId] = Date.now();
-      setSessionActivity((prev) => ({ ...prev, [sessionId]: 'busy' }));
+      markBusy(sessionId);
     }
-    // Write the command to the terminal
     const ref = terminalRefs.current[sessionId];
     if (ref?.current) {
-      ref.current.write(cmd);
       ref.current.focus();
+      setTimeout(() => ref.current?.write(cmd), 50);
     }
-  }, []);
+  }, [setActivity, markBusy]);
 
   const sessionProjectMap = new Map<string, { session: typeof store.activeSession; projectPath: string }>();
   for (const project of store.projects) {
@@ -161,11 +186,10 @@ export function App() {
   }
 
   const handleTerminalData = useCallback((sessionId: string, data: string) => {
-    // Ctrl+C while serving → exit serving mode
+    // Ctrl+C while serving → exit serving mode, go to busy (will settle to completed via output gap)
     if (data === '\x03' && activityRef.current[sessionId] === 'serving') {
-      activityRef.current[sessionId] = 'busy';
       serverUrlFoundRef.current[sessionId] = false;
-      setSessionActivity((prev) => ({ ...prev, [sessionId]: 'busy' }));
+      markBusy(sessionId);
       setSessionServerUrls((prev) => {
         const next = { ...prev };
         delete next[sessionId];
@@ -174,27 +198,24 @@ export function App() {
     }
 
     if (data === '\r') {
-      const cmd = inputBufferRef.current.trim();
+      const cmd = (inputBufferRef.current[sessionId] || '').trim();
       if (cmd) {
         store.updateSessionLastCommand(sessionId, cmd);
-        // Detect server-like commands and enter serving mode (without URL)
+        // Detect server-like commands → serving mode immediately
         if (SERVER_CMD_RE.test(cmd)) {
-          activityRef.current[sessionId] = 'serving';
-          setSessionActivity((prev) => ({ ...prev, [sessionId]: 'serving' }));
-        } else if (activityRef.current[sessionId] === 'idle') {
-          // Transition out of idle so handlePtyOutput starts tracking activity
-          activityRef.current[sessionId] = 'busy';
-          busySinceRef.current[sessionId] = Date.now();
-          setSessionActivity((prev) => ({ ...prev, [sessionId]: 'busy' }));
+          setActivity(sessionId, 'serving');
+        } else {
+          // Any command → busy (works from idle, completed, or already busy)
+          markBusy(sessionId);
         }
       }
-      inputBufferRef.current = '';
+      inputBufferRef.current[sessionId] = '';
     } else if (data === '\x7f') {
-      inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+      inputBufferRef.current[sessionId] = (inputBufferRef.current[sessionId] || '').slice(0, -1);
     } else if (data.length === 1 && data >= ' ') {
-      inputBufferRef.current += data;
+      inputBufferRef.current[sessionId] = (inputBufferRef.current[sessionId] || '') + data;
     }
-  }, [store.updateSessionLastCommand]);
+  }, [store.updateSessionLastCommand, markBusy, setActivity]);
 
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)' }}>
@@ -231,6 +252,10 @@ export function App() {
                 onClaudeDefaultChange={store.setClaudeDefault}
                 openDefault={store.openDefault}
                 onOpenDefaultChange={store.setOpenDefault}
+                autoCopy={store.autoCopy}
+                onAutoCopyChange={store.setAutoCopy}
+                rightClickPaste={store.rightClickPaste}
+                onRightClickPasteChange={store.setRightClickPaste}
                 onClose={() => setShowSettings(false)}
               />
             </div>
@@ -260,15 +285,12 @@ export function App() {
                 onRunCommand={store.activeSessionId
                   ? (cmd: string) => {
                       const sid = store.activeSessionId!;
-                      if (activityRef.current[sid] === 'idle') {
-                        activityRef.current[sid] = 'busy';
-                        busySinceRef.current[sid] = Date.now();
-                        setSessionActivity((prev) => ({ ...prev, [sid]: 'busy' }));
-                      }
+                      markBusy(sid);
                       const ref = terminalRefs.current[sid];
                       if (ref?.current) {
-                        ref.current.write(cmd);
                         ref.current.focus();
+                        // Small delay to let focus events settle before writing
+                        setTimeout(() => ref.current?.write(cmd), 50);
                       }
                     }
                   : null
@@ -306,6 +328,8 @@ export function App() {
                       isActive={sessionId === store.activeSessionId}
                       shellPath={store.shellPath}
                       shellArgs={store.shellArgs}
+                      autoCopy={store.autoCopy}
+                      rightClickPaste={store.rightClickPaste}
                     />
                   </div>
                 ))}

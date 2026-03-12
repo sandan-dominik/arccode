@@ -31,6 +31,8 @@ export interface StoreData {
   shellArgs?: string[];
   claudeDefault?: ClaudeMode;
   openDefault?: OpenDefault;
+  autoCopy?: boolean;
+  rightClickPaste?: boolean;
 }
 
 export interface ElectronAPI {
