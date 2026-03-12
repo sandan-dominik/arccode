@@ -10,12 +10,12 @@ import { PublisherGithub } from '@electron-forge/publisher-github';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: '**/{node-pty,node-pty-prebuilt-multiarch}/**',
+    },
     icon: './assets/icon',
   },
-  rebuildConfig: {
-    onlyModules: [], // Skip native rebuild - already handled by electron-rebuild
-  },
+  rebuildConfig: {},
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ['darwin']),
