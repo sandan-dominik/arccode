@@ -160,31 +160,38 @@ function setupUpdater() {
   const repo = 'sandan-dominik/arccode';
   const feedURL = `https://update.electronjs.org/${repo}/${process.platform}-${process.arch}/${app.getVersion()}`;
 
+  console.log('[updater] Feed URL:', feedURL);
+
   try {
     autoUpdater.setFeedURL({ url: feedURL });
-  } catch {
+  } catch (e) {
+    console.error('[updater] Failed to set feed URL:', e);
     return;
   }
 
   autoUpdater.on('update-available', () => {
+    console.log('[updater] Update available, downloading...');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:status', 'downloading');
     }
   });
 
   autoUpdater.on('update-downloaded', () => {
+    console.log('[updater] Update downloaded, ready to install');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:status', 'ready');
     }
   });
 
   autoUpdater.on('update-not-available', () => {
+    console.log('[updater] No update available');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:status', 'up-to-date');
     }
   });
 
-  autoUpdater.on('error', () => {
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] Error:', err);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:status', 'error');
     }
@@ -204,7 +211,7 @@ function setupUpdater() {
     autoUpdater.quitAndInstall();
   });
 
-  // Auto-check on startup after a short delay
+  // Auto-check on startup after a short delay, then every 30 minutes
   setTimeout(() => {
     try {
       autoUpdater.checkForUpdates();
@@ -212,6 +219,14 @@ function setupUpdater() {
       // ignore
     }
   }, 5000);
+
+  setInterval(() => {
+    try {
+      autoUpdater.checkForUpdates();
+    } catch {
+      // ignore
+    }
+  }, 30 * 60 * 1000);
 }
 
 app.on('ready', () => {
