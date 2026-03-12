@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import type { StoreData } from '../shared/types';
 
-const STORE_FILE = 'terminal-manager-data.json';
+const STORE_FILE = 'arccode-data.json';
 
 function getStorePath(): string {
   return path.join(app.getPath('userData'), STORE_FILE);

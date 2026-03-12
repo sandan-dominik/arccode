@@ -328,6 +328,31 @@ export function App() {
                       </div>
                     </div>
                     {(() => {
+                      if (store.projects.length === 0) return (
+                        <button
+                          onClick={store.addProject}
+                          style={{
+                            padding: '32px 48px',
+                            border: '2px dashed var(--border)',
+                            borderRadius: 10,
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            color: 'var(--text-muted)',
+                            fontSize: 14,
+                            transition: 'border-color 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = 'var(--text-muted)';
+                            e.currentTarget.style.color = 'var(--text-primary)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'var(--border)';
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                          }}
+                        >
+                          + Create project
+                        </button>
+                      );
                       const recentSessions: { sessionId: string; sessionName: string; projectName: string }[] = [];
                       for (const project of store.projects) {
                         for (const session of project.sessions) {

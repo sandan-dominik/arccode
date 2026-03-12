@@ -93,17 +93,33 @@ export function Sidebar({
       {/* Project list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 8px' }}>
         {projects.length === 0 && (
-          <div style={{
-            padding: '20px 14px',
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            lineHeight: 1.5,
-          }}>
-            No projects yet.
-            <br />
-            Click + to add a folder.
-          </div>
+          <button
+            onClick={onAddProject}
+            style={{
+              margin: '12px 14px',
+              padding: '24px 14px',
+              border: '2px dashed var(--border)',
+              borderRadius: 8,
+              background: 'transparent',
+              cursor: 'pointer',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: 12,
+              lineHeight: 1.5,
+              width: 'calc(100% - 28px)',
+              transition: 'border-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'var(--text-muted)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.color = 'var(--text-muted)';
+            }}
+          >
+            + Create project
+          </button>
         )}
         {projects.map((project) => (
           <ProjectItem

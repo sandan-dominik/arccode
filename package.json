@@ -1,5 +1,5 @@
 {
-  "name": "terminal-manager",
+  "name": "arccode",
   "productName": "ArcCode",
   "version": "0.1.0",
   "description": "Electron app to manage multiple Git Bash terminals organized by project/session",

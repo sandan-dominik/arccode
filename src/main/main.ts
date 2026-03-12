@@ -12,9 +12,6 @@ if (started) {
   app.quit();
 }
 
-// Set GPU cache path to avoid "Unable to move the cache" errors on Windows
-app.setPath('gpu-cache', path.join(app.getPath('userData'), 'gpu-cache'));
-
 updateElectronApp();
 
 protocol.registerSchemesAsPrivileged([
@@ -161,6 +158,12 @@ function setupIPC() {
 }
 
 app.on('ready', () => {
+  // Set GPU cache path to avoid "Unable to move the cache" errors on Windows
+  try {
+    app.setPath('gpu-cache', path.join(app.getPath('userData'), 'gpu-cache'));
+  } catch {
+    // Silently ignore — not all Electron versions support setting gpu-cache path
+  }
   // Remove default menu so it doesn't capture keyboard shortcuts
   Menu.setApplicationMenu(null);
   protocol.handle('assets', (request) => {
