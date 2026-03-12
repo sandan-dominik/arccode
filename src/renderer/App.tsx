@@ -57,9 +57,21 @@ export function App() {
       if (prevActiveSessionRef.current) {
         chimeSuppressUntilRef.current[prevActiveSessionRef.current] = until;
       }
+
+      // If switching to a tab that's completed/error, start the idle decay now
+      const state = activityRef.current[store.activeSessionId];
+      if (state === 'completed' || state === 'error') {
+        clearTimeout(idleDecayTimers.current[store.activeSessionId]);
+        idleDecayTimers.current[store.activeSessionId] = setTimeout(() => {
+          const s = activityRef.current[store.activeSessionId!];
+          if (s === 'completed' || s === 'error') {
+            setActivity(store.activeSessionId!, 'idle');
+          }
+        }, COMPLETED_DECAY_MS);
+      }
     }
     prevActiveSessionRef.current = store.activeSessionId;
-  }, [store.activeSessionId]);
+  }, [store.activeSessionId, setActivity]);
 
   const playDoneSound = useCallback(() => {
     try {
@@ -85,7 +97,7 @@ export function App() {
 
   const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
   // Detect crash/error patterns in PTY output (case-insensitive, stripped of ANSI codes)
-  const ERROR_RE = /\b(ERROR|FATAL|ELIFECYCLE|SIGABRT|SIGSEGV|panic:|Traceback \(most recent|Unhandled rejection|Cannot find module|segmentation fault|core dumped|ENOSPC|ENOMEM)\b|npm ERR!|error Command failed/i;
+  const ERROR_RE = /\bERROR\b|npm ERR!/;
   const errorDetectedRef = useRef<Record<string, boolean>>({});
 
   // ── PTY output handler ──
@@ -138,19 +150,22 @@ export function App() {
         playDoneSound();
       }
 
-      // Decay completed/error → idle after a while
+      // Decay completed/error → idle after a while, but only if the tab is currently active.
+      // If the tab is in the background, defer decay until the user switches to it.
       clearTimeout(idleDecayTimers.current[sessionId]);
-      idleDecayTimers.current[sessionId] = setTimeout(() => {
-        const s = activityRef.current[sessionId];
-        if (s === 'completed' || s === 'error') {
-          setActivity(sessionId, 'idle');
-        }
-      }, COMPLETED_DECAY_MS);
+      if (store.activeSessionId === sessionId) {
+        idleDecayTimers.current[sessionId] = setTimeout(() => {
+          const s = activityRef.current[sessionId];
+          if (s === 'completed' || s === 'error') {
+            setActivity(sessionId, 'idle');
+          }
+        }, COMPLETED_DECAY_MS);
+      }
     }, OUTPUT_GAP_MS);
-  }, [playDoneSound, setActivity]);
+  }, [playDoneSound, setActivity, store.activeSessionId]);
 
   const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview)$/;
-  const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview)$|electron-forge\s+start/;
+  const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview|[\w:-]*:?listen[\w:-]*)$|electron-forge\s+start/;
 
   // ── Transition to busy ──
   // Called when the user explicitly starts a command (Enter key or button click).

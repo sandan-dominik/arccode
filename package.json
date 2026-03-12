@@ -1,7 +1,7 @@
 {
   "name": "arccode",
   "productName": "ArcCode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Electron app to manage multiple Git Bash terminals organized by project/session",
   "repository": {
     "type": "git",
