@@ -21,6 +21,7 @@ export function App() {
   const idleDecayTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const activityRef = useRef<Record<string, ActivityState>>({});
   const busySinceRef = useRef<Record<string, number>>({});
+  const interactiveRef = useRef<Record<string, boolean>>({});
   const [sessionServerUrls, setSessionServerUrls] = useState<Record<string, string>>({});
   const serverUrlFoundRef = useRef<Record<string, boolean>>({});
   const chimeSuppressUntilRef = useRef<Record<string, number>>({});
@@ -135,6 +136,8 @@ export function App() {
 
     // Reset the "output gap" timer — command is still producing output
     clearTimeout(activityTimers.current[sessionId]);
+    // Interactive tools (e.g. claude) have long pauses — use longer timeout
+    const gapMs = interactiveRef.current[sessionId] ? 30_000 : OUTPUT_GAP_MS;
     activityTimers.current[sessionId] = setTimeout(() => {
       delete activityTimers.current[sessionId];
       if (activityRef.current[sessionId] !== 'busy') return;
@@ -161,11 +164,13 @@ export function App() {
           }
         }, COMPLETED_DECAY_MS);
       }
-    }, OUTPUT_GAP_MS);
+    }, gapMs);
   }, [playDoneSound, setActivity, store.activeSessionId]);
 
-  const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview)$/;
+  const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview|[\w:-]*:?listen[\w:-]*)$/;
   const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview|[\w:-]*:?listen[\w:-]*)$|electron-forge\s+start/;
+  // Commands that are long-running interactive tools (not servers, but shouldn't trigger idle on output gaps)
+  const INTERACTIVE_CMD_RE = /\bclaude\b/;
 
   // ── Transition to busy ──
   // Called when the user explicitly starts a command (Enter key or button click).
@@ -174,6 +179,7 @@ export function App() {
     delete activityTimers.current[sessionId];
     clearTimeout(idleDecayTimers.current[sessionId]);
     errorDetectedRef.current[sessionId] = false;
+    interactiveRef.current[sessionId] = false;
     busySinceRef.current[sessionId] = Date.now();
     setActivity(sessionId, 'busy');
   }, [setActivity]);
@@ -201,6 +207,10 @@ export function App() {
   }
 
   const handleTerminalData = useCallback((sessionId: string, data: string) => {
+    // Ctrl+C clears interactive flag so output gap detection resumes
+    if (data === '\x03') {
+      interactiveRef.current[sessionId] = false;
+    }
     // Ctrl+C while serving → exit serving mode, go to busy (will settle to completed via output gap)
     if (data === '\x03' && activityRef.current[sessionId] === 'serving') {
       serverUrlFoundRef.current[sessionId] = false;
@@ -222,6 +232,10 @@ export function App() {
         } else {
           // Any command → busy (works from idle, completed, or already busy)
           markBusy(sessionId);
+          // Flag interactive CLI tools so output gaps don't trigger completion
+          if (INTERACTIVE_CMD_RE.test(cmd)) {
+            interactiveRef.current[sessionId] = true;
+          }
         }
       }
       inputBufferRef.current[sessionId] = '';
