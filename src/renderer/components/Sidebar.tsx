@@ -177,7 +177,12 @@ function UpdateButton() {
 
   useEffect(() => {
     const removeListener = window.electronAPI.updater.onStatus((s) => {
-      setStatus(s);
+      // Only allow forward transitions: idle → downloading → ready. Don't regress.
+      setStatus((prev) => {
+        if (prev === 'ready') return prev;
+        if (prev === 'downloading' && s !== 'ready') return prev;
+        return s;
+      });
     });
     // Check on mount
     window.electronAPI.updater.check();
