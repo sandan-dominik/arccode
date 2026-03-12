@@ -24,9 +24,23 @@ const LAYOUTS: { type: LayoutType; label: string; icon: string }[] = [
   { type: 'grid', label: '2x2', icon: '[#]' },
 ];
 
-const CLAUDE_OPTIONS: { mode: ClaudeMode; label: string; cmd: string }[] = [
-  { mode: 'claude', label: 'Claude', cmd: 'claude\r' },
-  { mode: 'claude-yolo', label: 'Claude --dangerously-skip-permissions', cmd: 'claude --dangerously-skip-permissions\r' },
+const CLAUDE_SHIELD_GREEN = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#4ade8033" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+const CLAUDE_SHIELD_RED = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#f8717133" />
+    <path d="M15 9l-6 6M9 9l6 6" />
+  </svg>
+);
+
+const CLAUDE_OPTIONS: { mode: ClaudeMode; label: string; icon: React.ReactNode; cmd: string }[] = [
+  { mode: 'claude', label: 'Claude', icon: CLAUDE_SHIELD_GREEN, cmd: 'claude\r' },
+  { mode: 'claude-yolo', label: 'Claude (skip permissions)', icon: CLAUDE_SHIELD_RED, cmd: 'claude --dangerously-skip-permissions\r' },
 ];
 
 const OPEN_OPTIONS: { mode: OpenDefault; label: string; icon: React.ReactNode }[] = [
@@ -321,6 +335,7 @@ export function HeaderBar({
             >
               <img src="assets://claude.svg" alt="" width="14" height="14" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               Claude
+              {claudeDefaultOption.icon}
             </button>
             <button
               onClick={() => setClaudeOpen(!claudeOpen)}
@@ -365,16 +380,20 @@ export function HeaderBar({
                       fontSize: 12,
                       color: 'var(--text-primary)',
                       fontWeight: opt.mode === claudeDefault ? 600 : 400,
+                      whiteSpace: 'nowrap',
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    {opt.mode === claudeDefault && (
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                        <path d="M1.5 5.5L4 8L8.5 2" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
+                    {opt.icon}
                     {opt.label}
+                    <span style={{ marginLeft: 'auto' }}>
+                      {opt.mode === claudeDefault && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                          <path d="M1.5 5.5L4 8L8.5 2" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -445,13 +464,15 @@ export function HeaderBar({
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    {opt.mode === openDefault && (
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                        <path d="M1.5 5.5L4 8L8.5 2" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
                     {opt.icon}
                     {opt.label}
+                    <span style={{ marginLeft: 'auto' }}>
+                      {opt.mode === openDefault && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                          <path d="M1.5 5.5L4 8L8.5 2" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>

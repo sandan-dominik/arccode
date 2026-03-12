@@ -330,11 +330,19 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
               Claude Button
             </label>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => onClaudeDefaultChange('claude')} style={toggleBtnStyle(claudeDefault === 'claude')}>
+              <button onClick={() => onClaudeDefaultChange('claude')} style={{ ...toggleBtnStyle(claudeDefault === 'claude'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#4ade8033" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
                 claude
               </button>
-              <button onClick={() => onClaudeDefaultChange('claude-yolo')} style={toggleBtnStyle(claudeDefault === 'claude-yolo')}>
-                claude --dangerously-skip-permissions
+              <button onClick={() => onClaudeDefaultChange('claude-yolo')} style={{ ...toggleBtnStyle(claudeDefault === 'claude-yolo'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#f8717133" />
+                  <path d="M15 9l-6 6M9 9l6 6" />
+                </svg>
+                claude (skip perms)
               </button>
             </div>
           </div>
