@@ -105,16 +105,12 @@ export function App() {
       return;
     }
 
-    // Normal busy/idle tracking for non-server sessions
-    if (currentState !== 'busy') {
-      busySinceRef.current[sessionId] = Date.now();
-    }
-    activityRef.current[sessionId] = 'busy';
+    // Only track output for sessions already in 'busy' state.
+    // Transitions to busy happen explicitly (Enter key, script run, Claude button)
+    // so shell echo from typing won't trigger a false busy state.
+    if (currentState !== 'busy') return;
+
     clearTimeout(idleDecayTimers.current[sessionId]);
-    setSessionActivity((prev) => {
-      if (prev[sessionId] === 'busy') return prev;
-      return { ...prev, [sessionId]: 'busy' };
-    });
     clearTimeout(activityTimers.current[sessionId]);
     activityTimers.current[sessionId] = setTimeout(() => {
       const wasBusy = activityRef.current[sessionId] === 'busy';
@@ -135,12 +131,17 @@ export function App() {
   }, [playDoneSound, initSession]);
 
   const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview)$/;
+  const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview)$|electron-forge\s+start/;
 
   const handleRunScript = useCallback((sessionId: string, scriptName: string, cmd: string) => {
     // If it's a server-like script, pre-set serving mode immediately
     if (SERVER_SCRIPT_NAMES.test(scriptName)) {
       activityRef.current[sessionId] = 'serving';
       setSessionActivity((prev) => ({ ...prev, [sessionId]: 'serving' }));
+    } else {
+      activityRef.current[sessionId] = 'busy';
+      busySinceRef.current[sessionId] = Date.now();
+      setSessionActivity((prev) => ({ ...prev, [sessionId]: 'busy' }));
     }
     // Write the command to the terminal
     const ref = terminalRefs.current[sessionId];
@@ -176,6 +177,16 @@ export function App() {
       const cmd = inputBufferRef.current.trim();
       if (cmd) {
         store.updateSessionLastCommand(sessionId, cmd);
+        // Detect server-like commands and enter serving mode (without URL)
+        if (SERVER_CMD_RE.test(cmd)) {
+          activityRef.current[sessionId] = 'serving';
+          setSessionActivity((prev) => ({ ...prev, [sessionId]: 'serving' }));
+        } else if (activityRef.current[sessionId] === 'idle') {
+          // Transition out of idle so handlePtyOutput starts tracking activity
+          activityRef.current[sessionId] = 'busy';
+          busySinceRef.current[sessionId] = Date.now();
+          setSessionActivity((prev) => ({ ...prev, [sessionId]: 'busy' }));
+        }
       }
       inputBufferRef.current = '';
     } else if (data === '\x7f') {
@@ -248,7 +259,13 @@ export function App() {
                 serverUrl={store.activeSessionId ? sessionServerUrls[store.activeSessionId] || null : null}
                 onRunCommand={store.activeSessionId
                   ? (cmd: string) => {
-                      const ref = terminalRefs.current[store.activeSessionId!];
+                      const sid = store.activeSessionId!;
+                      if (activityRef.current[sid] === 'idle') {
+                        activityRef.current[sid] = 'busy';
+                        busySinceRef.current[sid] = Date.now();
+                        setSessionActivity((prev) => ({ ...prev, [sid]: 'busy' }));
+                      }
+                      const ref = terminalRefs.current[sid];
                       if (ref?.current) {
                         ref.current.write(cmd);
                         ref.current.focus();

@@ -12,6 +12,9 @@ if (started) {
   app.quit();
 }
 
+// Set GPU cache path to avoid "Unable to move the cache" errors on Windows
+app.setPath('gpu-cache', path.join(app.getPath('userData'), 'gpu-cache'));
+
 updateElectronApp();
 
 protocol.registerSchemesAsPrivileged([
@@ -30,7 +33,9 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
     },
-    icon: path.join(__dirname, '../../assets/icon.ico'),
+    icon: app.isPackaged
+      ? path.join(process.resourcesPath, 'assets', 'icon.ico')
+      : path.join(__dirname, '../../assets/icon.ico'),
     autoHideMenuBar: true,
     backgroundColor: '#171717',
   });
@@ -159,7 +164,10 @@ app.on('ready', () => {
   // Remove default menu so it doesn't capture keyboard shortcuts
   Menu.setApplicationMenu(null);
   protocol.handle('assets', (request) => {
-    const filePath = path.join(__dirname, '../../assets', request.url.replace('assets://', ''));
+    const fileName = request.url.replace('assets://', '');
+    const filePath = app.isPackaged
+      ? path.join(process.resourcesPath, 'assets', fileName)
+      : path.join(__dirname, '../../assets', fileName);
     return net.fetch(`file://${filePath}`);
   });
   setupIPC();

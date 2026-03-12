@@ -25,6 +25,7 @@ const config: ForgeConfig = {
       unpack: '**/{node-pty,node-pty-prebuilt-multiarch}/**',
     },
     icon: './assets/icon',
+    extraResource: ['./assets'],
   },
   rebuildConfig: {},
   hooks: {
