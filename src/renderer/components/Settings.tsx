@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ThemeMode, ClaudeMode, OpenDefault } from '../types';
 
 const SHELL_PRESETS: { name: string; path: string; args: string[] }[] = [
@@ -395,7 +395,109 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
             </div>
           </div>
         </div>
+
+        {/* Updates */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+            marginBottom: 12,
+          }}>
+            Updates
+          </div>
+          <UpdateCheck />
+        </div>
       </div>
     </div>
+  );
+}
+
+function UpdateCheck() {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error'>('idle');
+
+  useEffect(() => {
+    const removeListener = window.electronAPI.updater.onStatus((s) => {
+      if (s === 'downloading') setStatus('downloading');
+      else if (s === 'ready') setStatus('ready');
+      else if (s === 'up-to-date') setStatus('up-to-date');
+      else if (s === 'error') setStatus('error');
+    });
+    return removeListener;
+  }, []);
+
+  const handleCheck = () => {
+    setStatus('checking');
+    window.electronAPI.updater.check();
+    // If no status comes back within 10s, assume up-to-date
+    setTimeout(() => {
+      setStatus((prev) => prev === 'checking' ? 'up-to-date' : prev);
+    }, 10000);
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+        v{window.electronAPI.app.getVersion()}
+      </span>
+      {status === 'ready' ? (
+        <button
+          onClick={() => window.electronAPI.updater.install()}
+          style={{
+            fontSize: 11,
+            padding: '5px 14px',
+            borderRadius: 4,
+            border: '1px solid var(--success)',
+            background: 'var(--bg-surface)',
+            color: 'var(--success)',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Update ready — restart to install
+        </button>
+      ) : (
+        <button
+          onClick={handleCheck}
+          disabled={status === 'checking' || status === 'downloading'}
+          style={{
+            fontSize: 11,
+            padding: '5px 14px',
+            borderRadius: 4,
+            border: '1px solid var(--border)',
+            background: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
+            cursor: status === 'checking' || status === 'downloading' ? 'default' : 'pointer',
+            opacity: status === 'checking' || status === 'downloading' ? 0.6 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          {status === 'checking' && <Spinner />}
+          {status === 'downloading' && <Spinner />}
+          {status === 'checking' ? 'Checking...'
+            : status === 'downloading' ? 'Downloading...'
+            : 'Check for Updates'}
+        </button>
+      )}
+      {status === 'up-to-date' && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>You're up to date</span>
+      )}
+      {status === 'error' && (
+        <span style={{ fontSize: 11, color: 'var(--danger)' }}>Update check failed</span>
+      )}
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" style={{ animation: 'hb-spin 0.8s linear infinite' }}>
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      <path d="M14 8a6 6 0 0 0-6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
   );
 }
