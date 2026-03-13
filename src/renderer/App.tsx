@@ -7,6 +7,39 @@ import { TerminalArea } from './components/TerminalArea';
 import type { TerminalPaneHandle } from './components/TerminalPane';
 import { Settings } from './components/Settings';
 import { useStore } from './hooks/useStore';
+import type { LayoutType, Project, Session } from '../shared/types';
+
+function getDefaultGroupLayout(count: number): LayoutType {
+  if (count >= 4) return 'grid';
+  if (count === 3) return 'three';
+  if (count === 2) return 'vsplit';
+  return 'single';
+}
+
+function getAvailableGroupLayouts(count: number): LayoutType[] {
+  if (count >= 4) return ['grid'];
+  if (count === 3) return ['three'];
+  if (count === 2) return ['vsplit'];
+  return ['single'];
+}
+
+function getGroupContainerStyle(layout: LayoutType, count: number): React.CSSProperties {
+  if (count <= 1 || layout === 'single') {
+    return { display: 'grid', gridTemplateColumns: '1fr', gridTemplateRows: '1fr' };
+  }
+  if (layout === 'grid' && count >= 4) {
+    return {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
+    };
+  }
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`,
+    gridTemplateRows: '1fr',
+  };
+}
 
 function GroupPaneHeader({ sessionName, projectName, projectPath, serverUrl, activity }: {
   sessionName: string;
@@ -145,7 +178,7 @@ export function App() {
         chimeSuppressUntilRef.current[prevActiveSessionRef.current] = until;
       }
 
-      // If switching to a tab that's completed/error, start the idle decay now
+      // If switching back to a completed/error tab, start the idle decay then.
       const state = activityRef.current[store.activeSessionId];
       if (state === 'completed' || state === 'error') {
         clearTimeout(idleDecayTimers.current[store.activeSessionId]);
@@ -184,7 +217,7 @@ export function App() {
 
   // Detect crash/error patterns in PTY output (case-insensitive, stripped of ANSI codes)
   const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
-  const ERROR_RE = /\bERROR\b|npm ERR!/;
+  // const ERROR_RE = /\bERROR\b|npm ERR!/;
   const errorDetectedRef = useRef<Record<string, boolean>>({});
 
   // ── PTY output handler ──
@@ -208,14 +241,15 @@ export function App() {
     // Only track output for 'busy' sessions. All other states ignore output.
     if (currentState !== 'busy') return;
 
-    // Scan for error patterns (strip ANSI escape codes first)
-    if (!errorDetectedRef.current[sessionId]) {
-      // eslint-disable-next-line no-control-regex
-      const plain = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-      if (ERROR_RE.test(plain)) {
-        errorDetectedRef.current[sessionId] = true;
-      }
-    }
+    // Temporarily disable error-state detection. Dev servers can emit transient
+    // errors while still running, which leaves the session stuck in error.
+    // if (!errorDetectedRef.current[sessionId]) {
+    //   // eslint-disable-next-line no-control-regex
+    //   const plain = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    //   if (ERROR_RE.test(plain)) {
+    //     errorDetectedRef.current[sessionId] = true;
+    //   }
+    // }
 
     // Reset the "output gap" timer — command is still producing output
     clearTimeout(activityTimers.current[sessionId]);
@@ -225,8 +259,8 @@ export function App() {
       delete activityTimers.current[sessionId];
       if (activityRef.current[sessionId] !== 'busy') return;
 
-      const hadError = errorDetectedRef.current[sessionId];
-      const finalState = hadError ? 'error' : 'completed';
+      // const hadError = errorDetectedRef.current[sessionId];
+      const finalState = 'completed';
       const busyDuration = Date.now() - (busySinceRef.current[sessionId] || 0);
       setActivity(sessionId, finalState);
 
@@ -236,17 +270,9 @@ export function App() {
         playDoneSound();
       }
 
-      // Decay completed/error → idle after a while, but only if the tab is currently active.
-      // If the tab is in the background, defer decay until the user switches to it.
+      // Do not decay immediately on completion. Keep completed visible until
+      // the user revisits that session, then the tab-switch effect starts the timer.
       clearTimeout(idleDecayTimers.current[sessionId]);
-      if (store.activeSessionId === sessionId) {
-        idleDecayTimers.current[sessionId] = setTimeout(() => {
-          const s = activityRef.current[sessionId];
-          if (s === 'completed' || s === 'error') {
-            setActivity(sessionId, 'idle');
-          }
-        }, COMPLETED_DECAY_MS);
-      }
     }, gapMs);
   }, [playDoneSound, setActivity, store.activeSessionId]);
 
@@ -280,7 +306,7 @@ export function App() {
     }
   }, [setActivity, markBusy]);
 
-  const sessionProjectMap = new Map<string, { session: typeof store.activeSession; projectPath: string }>();
+  const sessionProjectMap = new Map<string, { session: Session; projectPath: string }>();
   for (const project of store.projects) {
     for (const session of project.sessions) {
       if (store.openedSessionIds.has(session.id)) {
@@ -338,15 +364,16 @@ export function App() {
     });
   }, []);
 
-  const handleGroupSessions = useCallback((sessionIds: [string, string]) => {
+  const handleGroupSessions = useCallback((sessionIds: string[]) => {
     const groupId = store.addSessionGroup(sessionIds);
+    if (!groupId) return;
     setSelectedSessionIds(new Set());
-    // Mark both sessions as opened and activate the group
+    // Mark grouped sessions as opened and activate the group
     for (const id of sessionIds) {
       store.selectSession(id);
     }
     setActiveGroupId(groupId);
-  }, [store.addSessionGroup, store.selectSession, store.projects]);
+  }, [store.addSessionGroup, store.selectSession]);
 
   const handleUngroupSessions = useCallback((groupId: string) => {
     store.removeSessionGroup(groupId);
@@ -372,6 +399,18 @@ export function App() {
 
   // Find the active group for rendering
   const activeGroup = activeGroupId ? store.sessionGroups.find((g) => g.id === activeGroupId) || null : null;
+  const activeGroupLayout = activeGroup?.layout || getDefaultGroupLayout(activeGroup?.sessionIds.length || 0);
+  const activeGroupSessionIds = activeGroup
+    ? activeGroup.sessionIds.filter((sessionId) => sessionProjectMap.has(sessionId))
+    : [];
+  const activeGroupSessions = activeGroupSessionIds
+    .map((sessionId) => {
+      const project = store.projects.find((p) => p.sessions.some((s) => s.id === sessionId)) || null;
+      const session = project?.sessions.find((s) => s.id === sessionId) || null;
+      if (!project || !session) return null;
+      return { sessionId, project, session };
+    })
+    .filter(Boolean) as Array<{ sessionId: string; project: Project; session: Session }>;
 
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)' }}>
@@ -397,6 +436,7 @@ export function App() {
             onGroupSessions={handleGroupSessions}
             onUngroupSessions={handleUngroupSessions}
             onRenameGroup={store.renameSessionGroup}
+            onSetGroupLayout={(groupId, layout) => store.updateGroupLayout(groupId, layout)}
             activeGroupId={activeGroupId}
           />
         </Allotment.Pane>
@@ -430,8 +470,9 @@ export function App() {
                   projectName={null}
                   projectPath={store.activeProject?.path || null}
                   sessionName={activeGroup.name}
-                  layout={null}
-                  onLayoutChange={() => { /* no-op for groups */ }}
+                  layout={activeGroupLayout}
+                  availableLayouts={getAvailableGroupLayouts(activeGroupSessionIds.length)}
+                  onLayoutChange={(layout) => store.updateGroupLayout(activeGroup.id, layout)}
                   onNewSession={null}
                   onRenameSession={(name: string) => store.renameSessionGroup(activeGroup.id, name)}
                   claudeDefault={store.claudeDefault}
@@ -497,70 +538,101 @@ export function App() {
                 />
               ) : null}
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                {/* All session views */}
-                {[...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => {
-                  const groupIndex = activeGroup?.sessionIds.indexOf(sessionId) ?? -1;
-                  const isInActiveGroup = groupIndex >= 0;
-                  const isVisible = !showSettings && (
-                    isInActiveGroup || (!activeGroup && sessionId === store.activeSessionId)
-                  );
-                  // Find project for this session
-                  const sessionProject = store.projects.find((p) => p.sessions.some((s) => s.id === sessionId));
-                  return (
+                {activeGroup ? (
                   <div
-                    key={sessionId}
-                    onMouseDown={() => {
-                      if (isInActiveGroup && store.activeSessionId !== sessionId) {
-                        store.selectSession(sessionId);
-                      }
-                    }}
                     style={{
                       position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: isInActiveGroup ? (groupIndex === 0 ? 0 : '50%') : 0,
-                      right: isInActiveGroup ? (groupIndex === 0 ? '50%' : 0) : 0,
-                      display: 'flex',
-                      flexDirection: isInActiveGroup ? 'column' : undefined,
-                      visibility: isVisible ? 'visible' : 'hidden',
-                      pointerEvents: isVisible ? 'auto' : 'none',
-                      borderRight: isInActiveGroup && groupIndex === 0 ? '1px solid var(--border)' : undefined,
-                      borderLeft: isInActiveGroup && groupIndex === 1 ? '1px solid var(--border)' : undefined,
+                      inset: 0,
+                      ...getGroupContainerStyle(activeGroupLayout, activeGroupSessions.length),
                     }}
                   >
-                    {isInActiveGroup && (
-                      <GroupPaneHeader
-                        sessionName={session?.name || ''}
-                        projectName={sessionProject?.name || ''}
-                        projectPath={projectPath}
-                        serverUrl={sessionServerUrls[sessionId] || null}
-                        activity={sessionActivity[sessionId] || null}
-                      />
-                    )}
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-                      <TerminalArea
-                        ref={(() => {
-                          if (!terminalRefs.current[sessionId]) {
-                            terminalRefs.current[sessionId] = createRef();
+                    {activeGroupSessions.map(({ sessionId, project, session }, index) => (
+                      <div
+                        key={sessionId}
+                        onMouseDown={() => {
+                          if (store.activeSessionId !== sessionId) {
+                            store.selectSession(sessionId);
                           }
-                          return terminalRefs.current[sessionId];
-                        })()}
-                        sessionId={sessionId}
-                        layout={session!.layout}
-                        cwd={projectPath}
-                        onTerminalData={(data) => handleTerminalData(sessionId, data)}
-                        onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
-                        bgColor={store.terminalBgColor}
-                        isActive={isInActiveGroup || sessionId === store.activeSessionId}
-                        shellPath={store.shellPath}
-                        shellArgs={store.shellArgs}
-                        autoCopy={store.autoCopy}
-                        rightClickPaste={store.rightClickPaste}
-                      />
-                    </div>
+                        }}
+                        style={{
+                          minWidth: 0,
+                          minHeight: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          borderRight: activeGroupLayout !== 'grid' && index < activeGroupSessions.length - 1 ? '1px solid var(--border)' : undefined,
+                          borderBottom: activeGroupLayout === 'grid' && index < 2 ? '1px solid var(--border)' : undefined,
+                        }}
+                      >
+                        <GroupPaneHeader
+                          sessionName={session.name}
+                          projectName={project.name}
+                          projectPath={project.path}
+                          serverUrl={sessionServerUrls[sessionId] || null}
+                          activity={sessionActivity[sessionId] || null}
+                        />
+                        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                          <TerminalArea
+                            ref={(() => {
+                              if (!terminalRefs.current[sessionId]) {
+                                terminalRefs.current[sessionId] = createRef();
+                              }
+                              return terminalRefs.current[sessionId];
+                            })()}
+                            sessionId={sessionId}
+                            layout={session.layout}
+                            cwd={project.path}
+                            onTerminalData={(data) => handleTerminalData(sessionId, data)}
+                            onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
+                            bgColor={store.terminalBgColor}
+                            isActive
+                            shellPath={store.shellPath}
+                            shellArgs={store.shellArgs}
+                            autoCopy={store.autoCopy}
+                            rightClickPaste={store.rightClickPaste}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  );
-                })}
+                ) : (
+                  [...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => {
+                    const isVisible = !showSettings && sessionId === store.activeSessionId;
+                    return (
+                      <div
+                        key={sessionId}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          visibility: isVisible ? 'visible' : 'hidden',
+                          pointerEvents: isVisible ? 'auto' : 'none',
+                        }}
+                      >
+                        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                          <TerminalArea
+                            ref={(() => {
+                              if (!terminalRefs.current[sessionId]) {
+                                terminalRefs.current[sessionId] = createRef();
+                              }
+                              return terminalRefs.current[sessionId];
+                            })()}
+                            sessionId={sessionId}
+                            layout={session.layout}
+                            cwd={projectPath}
+                            onTerminalData={(data) => handleTerminalData(sessionId, data)}
+                            onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
+                            bgColor={store.terminalBgColor}
+                            isActive={sessionId === store.activeSessionId}
+                            shellPath={store.shellPath}
+                            shellArgs={store.shellArgs}
+                            autoCopy={store.autoCopy}
+                            rightClickPaste={store.rightClickPaste}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
 
                 {!store.activeSessionId && (
                   <div style={{

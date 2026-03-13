@@ -5,6 +5,13 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
 }
 
+function getDefaultGroupLayout(count: number): LayoutType {
+  if (count >= 4) return 'grid';
+  if (count === 3) return 'three';
+  if (count === 2) return 'vsplit';
+  return 'single';
+}
+
 export function useStore() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -250,7 +257,7 @@ export function useStore() {
     });
   }, [activeSessionId, theme, terminalBgColor, persist]);
 
-  const reorderGroupSessions = useCallback((projectId: string, sessionIds: [string, string], toIndex: number) => {
+  const reorderGroupSessions = useCallback((projectId: string, sessionIds: string[], toIndex: number) => {
     setProjects((prev) => {
       const next = prev.map((p) => {
         if (p.id !== projectId) return p;
@@ -308,11 +315,19 @@ export function useStore() {
     persist(projects, sessionId, theme, terminalBgColor, [...openedIdsRef.current]);
   }, [projects, theme, terminalBgColor, persist, markSessionOpened]);
 
-  const addSessionGroup = useCallback((sessionIds: [string, string], name?: string) => {
-    const group: SessionGroup = { id: generateId(), name: name || 'Group', sessionIds };
+  const addSessionGroup = useCallback((sessionIds: string[], name?: string) => {
+    const normalizedSessionIds = [...new Set(sessionIds)].slice(0, 4);
+    if (normalizedSessionIds.length === 0) return null;
+
+    const group: SessionGroup = {
+      id: generateId(),
+      name: name || 'Group',
+      sessionIds: normalizedSessionIds,
+      layout: getDefaultGroupLayout(normalizedSessionIds.length),
+    };
     setSessionGroups((prev) => {
       // Remove any existing groups containing these sessions
-      const filtered = prev.filter((g) => !g.sessionIds.some((id) => sessionIds.includes(id)));
+      const filtered = prev.filter((g) => !g.sessionIds.some((id) => normalizedSessionIds.includes(id)));
       const next = [...filtered, group];
       sessionGroupsRef.current = next;
       persist(projects, activeSessionId, theme, terminalBgColor);
@@ -342,6 +357,15 @@ export function useStore() {
   const updateGroupColor = useCallback((groupId: string, color: string) => {
     setSessionGroups((prev) => {
       const next = prev.map((g) => g.id === groupId ? { ...g, color } : g);
+      sessionGroupsRef.current = next;
+      persist(projects, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const updateGroupLayout = useCallback((groupId: string, layout: LayoutType) => {
+    setSessionGroups((prev) => {
+      const next = prev.map((g) => g.id === groupId ? { ...g, layout } : g);
       sessionGroupsRef.current = next;
       persist(projects, activeSessionId, theme, terminalBgColor);
       return next;
@@ -392,5 +416,6 @@ export function useStore() {
     removeSessionGroup,
     renameSessionGroup,
     updateGroupColor,
+    updateGroupLayout,
   };
 }

@@ -20,7 +20,8 @@ export interface SessionGroup {
   id: string;
   name: string;
   color?: string;
-  sessionIds: [string, string];
+  sessionIds: string[];
+  layout?: LayoutType;
 }
 
 export type ThemeMode = 'dark' | 'day-dark' | 'light';

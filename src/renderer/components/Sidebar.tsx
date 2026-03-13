@@ -12,16 +12,17 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
-  onReorderGroupSessions: (projectId: string, sessionIds: [string, string], toIndex: number) => void;
+  onReorderGroupSessions: (projectId: string, sessionIds: string[], toIndex: number) => void;
   sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
   onOpenSettings: () => void;
   selectedSessionIds: Set<string>;
   onToggleSelectSession: (sessionId: string) => void;
   sessionGroups: SessionGroup[];
-  onGroupSessions: (sessionIds: [string, string]) => void;
+  onGroupSessions: (sessionIds: string[]) => void;
   onUngroupSessions: (groupId: string) => void;
   onRenameGroup: (groupId: string, name: string) => void;
+  onSetGroupLayout: (groupId: string, layout: NonNullable<SessionGroup['layout']>) => void;
   activeGroupId: string | null;
 }
 
@@ -45,6 +46,7 @@ export function Sidebar({
   onGroupSessions,
   onUngroupSessions,
   onRenameGroup,
+  onSetGroupLayout,
   activeGroupId,
 }: SidebarProps) {
   return (
@@ -158,6 +160,7 @@ export function Sidebar({
             onGroupSessions={onGroupSessions}
             onUngroupSessions={onUngroupSessions}
             onRenameGroup={onRenameGroup}
+            onSetGroupLayout={onSetGroupLayout}
             activeGroupId={activeGroupId}
           />
         ))}

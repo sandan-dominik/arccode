@@ -6,6 +6,7 @@ interface HeaderBarProps {
   projectPath: string | null;
   sessionName: string | null;
   layout: LayoutType | null;
+  availableLayouts?: LayoutType[];
   onLayoutChange: (layout: LayoutType) => void;
   onNewSession: (() => void) | null;
   onRenameSession: ((name: string) => void) | null;
@@ -98,6 +99,7 @@ export function HeaderBar({
   projectPath,
   sessionName,
   layout,
+  availableLayouts,
   onLayoutChange,
   onNewSession,
   onRenameSession,
@@ -117,6 +119,7 @@ export function HeaderBar({
   const [scriptsOpen, setScriptsOpen] = useState(false);
   const [claudeOpen, setClaudeOpen] = useState(false);
   const [openMenuOpen, setOpenMenuOpen] = useState(false);
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const [openLoading, setOpenLoading] = useState(false);
@@ -125,6 +128,7 @@ export function HeaderBar({
   const scriptsRef = useRef<HTMLDivElement>(null);
   const claudeRef = useRef<HTMLDivElement>(null);
   const openMenuRef = useRef<HTMLDivElement>(null);
+  const layoutMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -156,19 +160,22 @@ export function HeaderBar({
 
   // Close any open dropdown on outside click
   useEffect(() => {
-    if (!scriptsOpen && !claudeOpen && !openMenuOpen && !colorPickerOpen) return;
+    if (!scriptsOpen && !claudeOpen && !openMenuOpen && !colorPickerOpen && !layoutMenuOpen) return;
     const handler = (e: MouseEvent) => {
       if (scriptsOpen && scriptsRef.current && !scriptsRef.current.contains(e.target as Node)) setScriptsOpen(false);
       if (claudeOpen && claudeRef.current && !claudeRef.current.contains(e.target as Node)) setClaudeOpen(false);
       if (openMenuOpen && openMenuRef.current && !openMenuRef.current.contains(e.target as Node)) setOpenMenuOpen(false);
+      if (layoutMenuOpen && layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) setLayoutMenuOpen(false);
       if (colorPickerOpen && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) setColorPickerOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [scriptsOpen, claudeOpen, openMenuOpen, colorPickerOpen]);
+  }, [scriptsOpen, claudeOpen, openMenuOpen, colorPickerOpen, layoutMenuOpen]);
 
   const claudeDefaultOption = AI_OPTIONS.find((o) => o.mode === claudeDefault) || AI_OPTIONS[0];
   const openDefaultOption = OPEN_OPTIONS.find((o) => o.mode === openDefault) || OPEN_OPTIONS[0];
+  const visibleLayouts = LAYOUTS.filter((item) => (availableLayouts || LAYOUTS.map((entry) => entry.type)).includes(item.type));
+  const activeLayout = visibleLayouts.find((item) => item.type === layout) || visibleLayouts[0] || null;
 
   const handleOpen = (mode: OpenDefault) => {
     if (!projectPath || openLoading) return;
@@ -350,6 +357,66 @@ export function HeaderBar({
 
       {/* Right: Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {layout && activeLayout && (
+          <div ref={layoutMenuRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setLayoutMenuOpen(!layoutMenuOpen)}
+              style={{
+                ...btnBase,
+                padding: '4px 10px',
+                borderRadius: 5,
+              }}
+            >
+              <span style={{ fontFamily: 'monospace' }}>{activeLayout.icon}</span>
+              Split
+              <svg width="8" height="8" viewBox="0 0 8 8" style={{ marginLeft: 2 }}>
+                <path d="M1 3L4 6L7 3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+              </svg>
+            </button>
+            {layoutMenuOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: 4,
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '4px 0',
+                zIndex: 1000,
+                minWidth: 170,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}>
+                {visibleLayouts.map((item) => (
+                  <button
+                    key={item.type}
+                    onClick={() => {
+                      setLayoutMenuOpen(false);
+                      onLayoutChange(item.type);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      color: 'var(--text-primary)',
+                      fontWeight: item.type === layout ? 600 : 400,
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <span style={{ fontFamily: 'monospace' }}>{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Scripts dropdown */}
         {projectPath && Object.keys(scripts).length > 0 && (
           <div ref={scriptsRef} style={{ position: 'relative' }}>

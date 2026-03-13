@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import type { Project, Session, SessionGroup } from '../types';
+import type { LayoutType, Project, Session, SessionGroup } from '../types';
 import { SessionItem } from './SessionItem';
+
+function getDefaultGroupLayout(count: number): LayoutType {
+  if (count >= 4) return 'grid';
+  if (count === 3) return 'three';
+  if (count === 2) return 'vsplit';
+  return 'single';
+}
 
 interface ProjectItemProps {
   project: Project;
@@ -11,15 +18,16 @@ interface ProjectItemProps {
   onRemoveProject: () => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
-  onReorderGroupSessions: (projectId: string, sessionIds: [string, string], toIndex: number) => void;
+  onReorderGroupSessions: (projectId: string, sessionIds: string[], toIndex: number) => void;
   sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
   selectedSessionIds: Set<string>;
   onToggleSelectSession: (sessionId: string) => void;
   sessionGroups: SessionGroup[];
-  onGroupSessions: (sessionIds: [string, string]) => void;
+  onGroupSessions: (sessionIds: string[]) => void;
   onUngroupSessions: (groupId: string) => void;
   onRenameGroup: (groupId: string, name: string) => void;
+  onSetGroupLayout: (groupId: string, layout: LayoutType) => void;
   activeGroupId: string | null;
 }
 
@@ -52,6 +60,7 @@ export function ProjectItem({
   onGroupSessions,
   onUngroupSessions,
   onRenameGroup,
+  onSetGroupLayout,
   activeGroupId,
 }: ProjectItemProps) {
   const [expanded, setExpanded] = useState(true);
@@ -76,12 +85,11 @@ export function ProjectItem({
     if (renderedInGroup.has(session.id)) return;
     const group = sessionGroups.find((g) => g.sessionIds.includes(session.id));
     if (group) {
-      const otherSessionId = group.sessionIds[0] === session.id ? group.sessionIds[1] : group.sessionIds[0];
-      const otherSession = project.sessions.find((s) => s.id === otherSessionId);
-      if (otherSession) {
-        renderedInGroup.add(session.id);
-        renderedInGroup.add(otherSessionId);
-        const groupSessions = group.sessionIds.map((id) => project.sessions.find((s) => s.id === id)!).filter(Boolean);
+      const groupSessions = group.sessionIds
+        .map((id) => project.sessions.find((s) => s.id === id))
+        .filter(Boolean) as Session[];
+      if (groupSessions.length > 0) {
+        for (const groupSession of groupSessions) renderedInGroup.add(groupSession.id);
         slots.push({ type: 'group', group, sessions: groupSessions, firstSessionIndex: i, color: group.color || '#ef4444' });
         return;
       }
@@ -157,6 +165,22 @@ export function ProjectItem({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [contextMenu, groupContextMenu]);
+
+  const selectedProjectSessionIds = project.sessions
+    .filter((session) => selectedSessionIds.has(session.id))
+    .map((session) => session.id)
+    .slice(0, 4);
+
+  const getGroupSessionIds = (anchorSessionId: string) => {
+    const nextIds = selectedProjectSessionIds.includes(anchorSessionId)
+      ? selectedProjectSessionIds
+      : [anchorSessionId, ...selectedProjectSessionIds];
+    return [...new Set(nextIds)].slice(0, 4);
+  };
+
+  const groupActionLabel = selectedProjectSessionIds.length <= 1
+    ? 'Create Group'
+    : `Group ${selectedProjectSessionIds.length} Sessions`;
 
   return (
     <div>
@@ -311,8 +335,8 @@ export function ProjectItem({
           style={{
             marginLeft: 20,
             borderLeft: '1px solid var(--border)',
-            paddingTop: 2,
-            paddingBottom: 2,
+            paddingTop: 6,
+            paddingBottom: 6,
           }}
         >
           {slots.map((slot, slotIndex) => {
@@ -333,10 +357,12 @@ export function ProjectItem({
                   onDrop={() => handleSlotDrop(slotIndex)}
                   style={{
                     border: `1px solid ${hexToRgba(gc, 0.3)}`,
+                    boxShadow: `inset 0 0 0 1px ${hexToRgba(gc, 0.3)}`,
                     borderRadius: 6,
                     background: hexToRgba(gc, 0.08),
-                    margin: '4px 4px',
+                    margin: '6px 6px',
                     padding: '0 0 2px',
+                    overflow: 'hidden',
                     borderTop: slotDropTarget === 'above' ? `2px solid var(--text-secondary)` : undefined,
                     borderBottom: slotDropTarget === 'below' ? `2px solid var(--text-secondary)` : undefined,
                   }}
@@ -437,10 +463,13 @@ export function ProjectItem({
                       onDrop={() => { /* group handles drag */ }}
                       dropTarget={null}
                       onToggleSelect={() => onToggleSelectSession(gs.id)}
-                      selectedCount={selectedSessionIds.size}
+                      onPrepareGrouping={() => {
+                        if (!selectedSessionIds.has(gs.id)) onToggleSelectSession(gs.id);
+                      }}
+                      selectedCount={selectedProjectSessionIds.length}
+                      groupActionLabel={groupActionLabel}
                       onGroupSelected={() => {
-                        const ids = [...selectedSessionIds].slice(0, 2) as [string, string];
-                        onGroupSessions(ids);
+                        onGroupSessions(getGroupSessionIds(gs.id));
                       }}
                     />
                   ))}
@@ -468,10 +497,13 @@ export function ProjectItem({
                 onDrop={() => handleSlotDrop(slotIndex)}
                 dropTarget={slotDropTarget}
                 onToggleSelect={() => onToggleSelectSession(session.id)}
-                selectedCount={selectedSessionIds.size}
+                onPrepareGrouping={() => {
+                  if (!selectedSessionIds.has(session.id)) onToggleSelectSession(session.id);
+                }}
+                selectedCount={selectedProjectSessionIds.length}
+                groupActionLabel={groupActionLabel}
                 onGroupSelected={() => {
-                  const ids = [...selectedSessionIds].slice(0, 2) as [string, string];
-                  onGroupSessions(ids);
+                  onGroupSessions(getGroupSessionIds(session.id));
                 }}
               />
             );
@@ -518,6 +550,30 @@ export function ProjectItem({
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
             Rename
+          </button>
+          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+          <button
+            onClick={() => {
+              const gid = groupContextMenu.groupId;
+              const group = sessionGroups.find((sg) => sg.id === gid);
+              if (group) {
+                onSetGroupLayout(gid, getDefaultGroupLayout(group.sessionIds.length));
+                onSelectSession(group.sessionIds[0]);
+              }
+              setGroupContextMenu(null);
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              padding: '6px 12px',
+              fontSize: 12,
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            Split
           </button>
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
           <button

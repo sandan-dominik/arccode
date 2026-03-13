@@ -16,8 +16,10 @@ interface SessionItemProps {
   activity: 'idle' | 'completed' | 'busy' | 'serving' | 'error' | null;
   serverUrl: string | null;
   onToggleSelect?: () => void;
+  onPrepareGrouping?: () => void;
   onGroupSelected?: () => void;
   selectedCount?: number;
+  groupActionLabel?: string;
   disableDrag?: boolean;
 }
 
@@ -29,7 +31,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function SessionItem({ session, index, isActive, isSelected, onSelect, onRemove, onRename, onDragStart, onDragOver, onDrop, dropTarget, activity, serverUrl, onToggleSelect, onGroupSelected, selectedCount = 0, disableDrag }: SessionItemProps) {
+export function SessionItem({ session, index, isActive, isSelected, onSelect, onRemove, onRename, onDragStart, onDragOver, onDrop, dropTarget, activity, serverUrl, onToggleSelect, onPrepareGrouping, onGroupSelected, selectedCount = 0, groupActionLabel = 'Group Sessions', disableDrag }: SessionItemProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [groupMenu, setGroupMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -69,6 +71,8 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
     setEditing(false);
   };
 
+  const effectiveGroupCount = isSelected ? selectedCount : selectedCount + 1;
+
   return (
     <div
       draggable={!disableDrag}
@@ -93,8 +97,8 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
       }}
       onContextMenu={(e) => {
         e.preventDefault();
-        // When this session is part of a multi-selection, show group menu
-        if (isSelected && selectedCount >= 2) {
+        onPrepareGrouping?.();
+        if (isSelected || selectedCount >= 1) {
           setGroupMenu({ x: e.clientX, y: e.clientY });
         } else {
           setConfirmRemove(false);
@@ -293,13 +297,14 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
           }}
         >
           <div style={{ padding: '4px 12px 6px', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {selectedCount} sessions selected
+            {effectiveGroupCount} sessions selected
           </div>
           {onGroupSelected && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setGroupMenu(null);
+                onPrepareGrouping?.();
                 onGroupSelected();
               }}
               style={{
@@ -314,7 +319,7 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              Group Sessions
+              {groupActionLabel}
             </button>
           )}
           <button
@@ -375,6 +380,28 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
               Select for Group
+            </button>
+          )}
+          {onGroupSelected && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setContextMenu(null);
+                onPrepareGrouping?.();
+                onGroupSelected();
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              {groupActionLabel}
             </button>
           )}
           <button
