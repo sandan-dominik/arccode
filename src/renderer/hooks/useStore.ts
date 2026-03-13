@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Project, Session, StoreData, LayoutType, ThemeMode, ClaudeMode, OpenDefault } from '../types';
+import type { Project, Session, SessionGroup, StoreData, LayoutType, ThemeMode, ClaudeMode, OpenDefault } from '../types';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
@@ -17,6 +17,7 @@ export function useStore() {
   const [openDefault, setOpenDefaultState] = useState<OpenDefault>('cursor');
   const [autoCopy, setAutoCopyState] = useState<boolean>(false);
   const [rightClickPaste, setRightClickPasteState] = useState<boolean>(false);
+  const [sessionGroups, setSessionGroups] = useState<SessionGroup[]>([]);
 
   // Load on mount
   useEffect(() => {
@@ -33,6 +34,7 @@ export function useStore() {
       if (data.openDefault) setOpenDefaultState(data.openDefault);
       if (data.autoCopy != null) setAutoCopyState(data.autoCopy);
       if (data.rightClickPaste != null) setRightClickPasteState(data.rightClickPaste);
+      if (data.sessionGroups) setSessionGroups(data.sessionGroups);
     });
   }, []);
 
@@ -56,6 +58,8 @@ export function useStore() {
   autoCopyRef.current = autoCopy;
   const rightClickPasteRef = useRef(rightClickPaste);
   rightClickPasteRef.current = rightClickPaste;
+  const sessionGroupsRef = useRef(sessionGroups);
+  sessionGroupsRef.current = sessionGroups;
 
   const persist = useCallback((newProjects: Project[], newActiveId: string | null, newTheme?: ThemeMode, newBgColor?: string, newOpenedIds?: string[]) => {
     const data: StoreData = {
@@ -70,6 +74,7 @@ export function useStore() {
       openDefault: openDefaultRef.current,
       autoCopy: autoCopyRef.current,
       rightClickPaste: rightClickPasteRef.current,
+      sessionGroups: sessionGroupsRef.current.length ? sessionGroupsRef.current : undefined,
     };
     window.electronAPI.store.save(data);
   }, []);
@@ -197,6 +202,12 @@ export function useStore() {
 
   const removeSession = useCallback((sessionId: string) => {
     closeSession(sessionId);
+    // Clean up any groups containing this session
+    setSessionGroups((prev) => {
+      const next = prev.filter((g) => !g.sessionIds.includes(sessionId));
+      sessionGroupsRef.current = next;
+      return next;
+    });
     setProjects((prev) => {
       const next = prev.map((p) => ({
         ...p,
@@ -239,6 +250,32 @@ export function useStore() {
     });
   }, [activeSessionId, theme, terminalBgColor, persist]);
 
+  const reorderGroupSessions = useCallback((projectId: string, sessionIds: [string, string], toIndex: number) => {
+    setProjects((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== projectId) return p;
+        const sessions = [...p.sessions];
+        // Collect the sessions to move
+        const toMove = sessionIds.map((id) => sessions.find((s) => s.id === id)!);
+        // Remove them from back to front to keep indices valid
+        const indices = sessionIds
+          .map((id) => sessions.findIndex((s) => s.id === id))
+          .sort((a, b) => b - a);
+        for (const idx of indices) sessions.splice(idx, 1);
+        // Adjust insert position for removed items that were before it
+        let insertAt = toIndex;
+        for (const idx of indices.sort((a, b) => a - b)) {
+          if (idx < toIndex) insertAt--;
+        }
+        insertAt = Math.max(0, Math.min(insertAt, sessions.length));
+        sessions.splice(insertAt, 0, ...toMove);
+        return { ...p, sessions };
+      });
+      persist(next, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [activeSessionId, theme, terminalBgColor, persist]);
+
   const setSessionLayout = useCallback((sessionId: string, layout: LayoutType) => {
     setProjects((prev) => {
       const next = prev.map((p) => ({
@@ -270,6 +307,46 @@ export function useStore() {
     markSessionOpened(sessionId);
     persist(projects, sessionId, theme, terminalBgColor, [...openedIdsRef.current]);
   }, [projects, theme, terminalBgColor, persist, markSessionOpened]);
+
+  const addSessionGroup = useCallback((sessionIds: [string, string], name?: string) => {
+    const group: SessionGroup = { id: generateId(), name: name || 'Group', sessionIds };
+    setSessionGroups((prev) => {
+      // Remove any existing groups containing these sessions
+      const filtered = prev.filter((g) => !g.sessionIds.some((id) => sessionIds.includes(id)));
+      const next = [...filtered, group];
+      sessionGroupsRef.current = next;
+      persist(projects, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+    return group.id;
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const removeSessionGroup = useCallback((groupId: string) => {
+    setSessionGroups((prev) => {
+      const next = prev.filter((g) => g.id !== groupId);
+      sessionGroupsRef.current = next;
+      persist(projects, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const renameSessionGroup = useCallback((groupId: string, name: string) => {
+    setSessionGroups((prev) => {
+      const next = prev.map((g) => g.id === groupId ? { ...g, name } : g);
+      sessionGroupsRef.current = next;
+      persist(projects, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
+  const updateGroupColor = useCallback((groupId: string, color: string) => {
+    setSessionGroups((prev) => {
+      const next = prev.map((g) => g.id === groupId ? { ...g, color } : g);
+      sessionGroupsRef.current = next;
+      persist(projects, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
 
   // Find active session and its project
   const activeSession = projects
@@ -307,7 +384,13 @@ export function useStore() {
     selectSession,
     renameSession,
     reorderSessions,
+    reorderGroupSessions,
     setSessionLayout,
     updateSessionLastCommand,
+    sessionGroups,
+    addSessionGroup,
+    removeSessionGroup,
+    renameSessionGroup,
+    updateGroupColor,
   };
 }

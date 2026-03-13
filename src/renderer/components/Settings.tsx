@@ -107,6 +107,36 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
             </button>
 
             <button
+              onClick={() => onThemeChange('day-dark')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                borderRadius: 8,
+                border: theme === 'day-dark' ? '2px solid var(--text-secondary)' : '2px solid var(--border)',
+                background: 'var(--bg-surface)',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 32,
+                borderRadius: 4,
+                background: '#1c1c1d',
+                border: '1px solid #333',
+              }} />
+              <span style={{
+                fontSize: 12,
+                color: theme === 'day-dark' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: theme === 'day-dark' ? 600 : 400,
+              }}>
+                Day Dark
+              </span>
+            </button>
+
+            <button
               onClick={() => onThemeChange('light')}
               style={{
                 display: 'flex',
@@ -327,9 +357,9 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 100 }}>
-              Claude Button
+              AI Button
             </label>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={() => onClaudeDefaultChange('claude')} style={{ ...toggleBtnStyle(claudeDefault === 'claude'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#4ade8033" />
@@ -343,6 +373,10 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
                   <path d="M15 9l-6 6M9 9l6 6" />
                 </svg>
                 claude (skip perms)
+              </button>
+              <button onClick={() => onClaudeDefaultChange('codex')} style={{ ...toggleBtnStyle(claudeDefault === 'codex'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <img src="assets://openai.svg" alt="" width="12" height="12" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                codex
               </button>
             </div>
           </div>

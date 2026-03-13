@@ -16,9 +16,16 @@ export interface Session {
 
 export type LayoutType = 'single' | 'hsplit' | 'vsplit' | 'three' | 'grid';
 
-export type ThemeMode = 'dark' | 'light';
+export interface SessionGroup {
+  id: string;
+  name: string;
+  color?: string;
+  sessionIds: [string, string];
+}
 
-export type ClaudeMode = 'claude' | 'claude-yolo';
+export type ThemeMode = 'dark' | 'day-dark' | 'light';
+
+export type ClaudeMode = 'claude' | 'claude-yolo' | 'codex';
 export type OpenDefault = 'cursor' | 'explorer';
 
 export interface StoreData {
@@ -33,6 +40,7 @@ export interface StoreData {
   openDefault?: OpenDefault;
   autoCopy?: boolean;
   rightClickPaste?: boolean;
+  sessionGroups?: SessionGroup[];
 }
 
 export interface ElectronAPI {

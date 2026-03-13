@@ -8,6 +8,90 @@ import type { TerminalPaneHandle } from './components/TerminalPane';
 import { Settings } from './components/Settings';
 import { useStore } from './hooks/useStore';
 
+function GroupPaneHeader({ sessionName, projectName, projectPath, serverUrl, activity }: {
+  sessionName: string;
+  projectName: string;
+  projectPath: string;
+  serverUrl: string | null;
+  activity: string | null;
+}) {
+  const [branch, setBranch] = useState('');
+  useEffect(() => {
+    if (projectPath) {
+      window.electronAPI.git.getBranch(projectPath).then(setBranch);
+    }
+  }, [projectPath]);
+
+  const activityColor = activity === 'busy' ? 'var(--activity-busy)'
+    : activity === 'serving' ? 'var(--activity-serving)'
+    : activity === 'completed' ? 'var(--success)'
+    : activity === 'error' ? 'var(--danger)'
+    : 'var(--text-muted)';
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      height: 28,
+      padding: '0 10px',
+      background: 'var(--bg-secondary)',
+      borderBottom: '1px solid var(--border)',
+      flexShrink: 0,
+      minWidth: 0,
+    }}>
+      {activity && (
+        <span style={{
+          display: 'inline-block',
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: activityColor,
+          flexShrink: 0,
+          animation: activity === 'busy' ? 'pulse 1.5s ease-in-out infinite' : undefined,
+        }} />
+      )}
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {sessionName}
+      </span>
+      {projectName && (
+        <span style={{
+          fontSize: 10,
+          fontWeight: 500,
+          padding: '1px 6px',
+          borderRadius: 3,
+          background: 'var(--badge-bg)',
+          color: 'var(--badge-text)',
+          flexShrink: 0,
+        }}>
+          {projectName}
+        </span>
+      )}
+      {branch && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" />
+          </svg>
+          {branch}
+        </span>
+      )}
+      {serverUrl && (
+        <span
+          onClick={() => window.electronAPI.shell.openExternal(serverUrl)}
+          style={{ fontSize: 10, color: 'var(--activity-serving)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 }}
+          title={`Open ${serverUrl} in browser`}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6.5" />
+            <path d="M1.5 8h13M8 1.5c-2 2.5-2 9.5 0 13M8 1.5c2 2.5 2 9.5 0 13" />
+          </svg>
+          {serverUrl.replace(/^https?:\/\//, '')}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function App() {
   // Blur any auto-focused element on mount
   useEffect(() => { (document.activeElement as HTMLElement)?.blur(); }, []);
@@ -26,6 +110,8 @@ export function App() {
   const serverUrlFoundRef = useRef<Record<string, boolean>>({});
   const chimeSuppressUntilRef = useRef<Record<string, number>>({});
   const terminalRefs = useRef<Record<string, React.RefObject<TerminalPaneHandle | null>>>({});
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
   // How long after last PTY output before we consider a command "done"
   const OUTPUT_GAP_MS = 2000;
@@ -96,8 +182,8 @@ export function App() {
     }
   }, []);
 
-  const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
   // Detect crash/error patterns in PTY output (case-insensitive, stripped of ANSI codes)
+  const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
   const ERROR_RE = /\bERROR\b|npm ERR!/;
   const errorDetectedRef = useRef<Record<string, boolean>>({});
 
@@ -109,16 +195,13 @@ export function App() {
     const currentState = activityRef.current[sessionId];
     if (!currentState) return;
 
-    // Scan for localhost URLs to auto-detect server mode
-    if (!serverUrlFoundRef.current[sessionId]) {
+    // Capture server URL from output only when already in serving mode (triggered by command detection)
+    if (currentState === 'serving' && !serverUrlFoundRef.current[sessionId]) {
       const match = data.match(SERVER_URL_RE);
       if (match) {
         const url = match[0].replace('0.0.0.0', 'localhost');
         serverUrlFoundRef.current[sessionId] = true;
         setSessionServerUrls((prev) => ({ ...prev, [sessionId]: url }));
-        setActivity(sessionId, 'serving');
-        clearTimeout(activityTimers.current[sessionId]);
-        return;
       }
     }
 
@@ -167,10 +250,10 @@ export function App() {
     }, gapMs);
   }, [playDoneSound, setActivity, store.activeSessionId]);
 
-  const SERVER_SCRIPT_NAMES = /^(dev|start|serve|watch|preview|[\w:-]*:?listen[\w:-]*)$/;
-  const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|serve|watch|preview|[\w:-]*:?listen[\w:-]*)$|electron-forge\s+start/;
+  const SERVER_SCRIPT_NAMES = /^(dev|start|[\w:-]*:?listen[\w:-]*)$/;
+  const SERVER_CMD_RE = /(?:npm\s+(?:run\s+)?|yarn\s+(?:run\s+)?|pnpm\s+(?:run\s+)?|bun\s+(?:run\s+)?)(dev|start|[\w:-]*:?listen[\w:-]*)$|electron-forge\s+start|convex\s+dev/;
   // Commands that are long-running interactive tools (not servers, but shouldn't trigger idle on output gaps)
-  const INTERACTIVE_CMD_RE = /\bclaude\b/;
+  const INTERACTIVE_CMD_RE = /\bclaude\b|\bcodex\b/;
 
   // ── Transition to busy ──
   // Called when the user explicitly starts a command (Enter key or button click).
@@ -246,6 +329,50 @@ export function App() {
     }
   }, [store.updateSessionLastCommand, markBusy, setActivity]);
 
+  const handleToggleSelectSession = useCallback((sessionId: string) => {
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  }, []);
+
+  const handleGroupSessions = useCallback((sessionIds: [string, string]) => {
+    const groupId = store.addSessionGroup(sessionIds);
+    setSelectedSessionIds(new Set());
+    // Mark both sessions as opened and activate the group
+    for (const id of sessionIds) {
+      store.selectSession(id);
+    }
+    setActiveGroupId(groupId);
+  }, [store.addSessionGroup, store.selectSession, store.projects]);
+
+  const handleUngroupSessions = useCallback((groupId: string) => {
+    store.removeSessionGroup(groupId);
+    if (activeGroupId === groupId) setActiveGroupId(null);
+  }, [store.removeSessionGroup, activeGroupId]);
+
+  // When selecting a session, check if it's part of a group and activate the group
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setShowSettings(false);
+    store.selectSession(sessionId);
+    setSelectedSessionIds(new Set());
+    const group = store.sessionGroups.find((g) => g.sessionIds.includes(sessionId));
+    if (group) {
+      setActiveGroupId(group.id);
+      // Make sure both sessions are opened
+      for (const id of group.sessionIds) {
+        store.selectSession(id);
+      }
+    } else {
+      setActiveGroupId(null);
+    }
+  }, [store.selectSession, store.sessionGroups]);
+
+  // Find the active group for rendering
+  const activeGroup = activeGroupId ? store.sessionGroups.find((g) => g.id === activeGroupId) || null : null;
+
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)' }}>
       <Allotment proportionalLayout={false}>
@@ -257,12 +384,20 @@ export function App() {
             onRemoveProject={store.removeProject}
             onAddSession={store.addSession}
             onRemoveSession={store.removeSession}
-            onSelectSession={(id) => { setShowSettings(false); store.selectSession(id); }}
+            onSelectSession={handleSelectSession}
             onRenameSession={store.renameSession}
             onReorderSessions={store.reorderSessions}
+            onReorderGroupSessions={store.reorderGroupSessions}
             sessionActivity={sessionActivity}
             sessionServerUrls={sessionServerUrls}
             onOpenSettings={() => setShowSettings(true)}
+            selectedSessionIds={selectedSessionIds}
+            onToggleSelectSession={handleToggleSelectSession}
+            sessionGroups={store.sessionGroups}
+            onGroupSessions={handleGroupSessions}
+            onUngroupSessions={handleUngroupSessions}
+            onRenameGroup={store.renameSessionGroup}
+            activeGroupId={activeGroupId}
           />
         </Allotment.Pane>
         <Allotment.Pane>
@@ -290,78 +425,142 @@ export function App() {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-primary)', visibility: showSettings ? 'hidden' : 'visible' }}>
-              {store.activeSessionId && <HeaderBar
-                projectName={store.activeProject?.name || null}
-                projectPath={store.activeProject?.path || null}
-                sessionName={store.activeSession?.name || null}
-                layout={store.activeSession?.layout || null}
-                onLayoutChange={(layout) => {
-                  if (store.activeSession) {
-                    store.setSessionLayout(store.activeSession.id, layout);
-                  }
-                }}
-                onNewSession={store.activeProject
-                  ? () => store.addSession(store.activeProject!.id)
-                  : null
-                }
-                onRenameSession={store.activeSession
-                  ? (name: string) => store.renameSession(store.activeSession!.id, name)
-                  : null
-                }
-                claudeDefault={store.claudeDefault}
-                openDefault={store.openDefault}
-                serverUrl={store.activeSessionId ? sessionServerUrls[store.activeSessionId] || null : null}
-                onRunCommand={store.activeSessionId
-                  ? (cmd: string) => {
-                      const sid = store.activeSessionId!;
-                      markBusy(sid);
-                      const ref = terminalRefs.current[sid];
-                      if (ref?.current) {
-                        ref.current.focus();
-                        // Small delay to let focus events settle before writing
-                        setTimeout(() => ref.current?.write(cmd), 50);
+              {activeGroup ? (
+                <HeaderBar
+                  projectName={null}
+                  projectPath={store.activeProject?.path || null}
+                  sessionName={activeGroup.name}
+                  layout={null}
+                  onLayoutChange={() => { /* no-op for groups */ }}
+                  onNewSession={null}
+                  onRenameSession={(name: string) => store.renameSessionGroup(activeGroup.id, name)}
+                  claudeDefault={store.claudeDefault}
+                  openDefault={store.openDefault}
+                  serverUrl={store.activeSessionId ? sessionServerUrls[store.activeSessionId] || null : null}
+                  onRunCommand={store.activeSessionId
+                    ? (cmd: string) => {
+                        const sid = store.activeSessionId!;
+                        markBusy(sid);
+                        const ref = terminalRefs.current[sid];
+                        if (ref?.current) {
+                          ref.current.focus();
+                          setTimeout(() => ref.current?.write(cmd), 50);
+                        }
                       }
+                    : null
+                  }
+                  onRunScript={store.activeSessionId
+                    ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
+                    : null
+                  }
+                  groupColor={activeGroup.color || null}
+                  onGroupColorChange={(color: string) => store.updateGroupColor(activeGroup.id, color)}
+                />
+              ) : store.activeSessionId ? (
+                <HeaderBar
+                  projectName={store.activeProject?.name || null}
+                  projectPath={store.activeProject?.path || null}
+                  sessionName={store.activeSession?.name || null}
+                  layout={store.activeSession?.layout || null}
+                  onLayoutChange={(layout) => {
+                    if (store.activeSession) {
+                      store.setSessionLayout(store.activeSession.id, layout);
                     }
-                  : null
-                }
-                onRunScript={store.activeSessionId
-                  ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
-                  : null
-                }
-              />}
+                  }}
+                  onNewSession={store.activeProject
+                    ? () => store.addSession(store.activeProject!.id)
+                    : null
+                  }
+                  onRenameSession={store.activeSession
+                    ? (name: string) => store.renameSession(store.activeSession!.id, name)
+                    : null
+                  }
+                  claudeDefault={store.claudeDefault}
+                  openDefault={store.openDefault}
+                  serverUrl={store.activeSessionId ? sessionServerUrls[store.activeSessionId] || null : null}
+                  onRunCommand={store.activeSessionId
+                    ? (cmd: string) => {
+                        const sid = store.activeSessionId!;
+                        markBusy(sid);
+                        const ref = terminalRefs.current[sid];
+                        if (ref?.current) {
+                          ref.current.focus();
+                          setTimeout(() => ref.current?.write(cmd), 50);
+                        }
+                      }
+                    : null
+                  }
+                  onRunScript={store.activeSessionId
+                    ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
+                    : null
+                  }
+                />
+              ) : null}
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                {[...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => (
+                {/* All session views */}
+                {[...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => {
+                  const groupIndex = activeGroup?.sessionIds.indexOf(sessionId) ?? -1;
+                  const isInActiveGroup = groupIndex >= 0;
+                  const isVisible = !showSettings && (
+                    isInActiveGroup || (!activeGroup && sessionId === store.activeSessionId)
+                  );
+                  // Find project for this session
+                  const sessionProject = store.projects.find((p) => p.sessions.some((s) => s.id === sessionId));
+                  return (
                   <div
                     key={sessionId}
+                    onMouseDown={() => {
+                      if (isInActiveGroup && store.activeSessionId !== sessionId) {
+                        store.selectSession(sessionId);
+                      }
+                    }}
                     style={{
                       position: 'absolute',
-                      inset: 0,
+                      top: 0,
+                      bottom: 0,
+                      left: isInActiveGroup ? (groupIndex === 0 ? 0 : '50%') : 0,
+                      right: isInActiveGroup ? (groupIndex === 0 ? '50%' : 0) : 0,
                       display: 'flex',
-                      visibility: !showSettings && sessionId === store.activeSessionId ? 'visible' : 'hidden',
-                      pointerEvents: !showSettings && sessionId === store.activeSessionId ? 'auto' : 'none',
+                      flexDirection: isInActiveGroup ? 'column' : undefined,
+                      visibility: isVisible ? 'visible' : 'hidden',
+                      pointerEvents: isVisible ? 'auto' : 'none',
+                      borderRight: isInActiveGroup && groupIndex === 0 ? '1px solid var(--border)' : undefined,
+                      borderLeft: isInActiveGroup && groupIndex === 1 ? '1px solid var(--border)' : undefined,
                     }}
                   >
-                    <TerminalArea
-                      ref={(() => {
-                        if (!terminalRefs.current[sessionId]) {
-                          terminalRefs.current[sessionId] = createRef();
-                        }
-                        return terminalRefs.current[sessionId];
-                      })()}
-                      sessionId={sessionId}
-                      layout={session!.layout}
-                      cwd={projectPath}
-                      onTerminalData={(data) => handleTerminalData(sessionId, data)}
-                      onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
-                      bgColor={store.terminalBgColor}
-                      isActive={sessionId === store.activeSessionId}
-                      shellPath={store.shellPath}
-                      shellArgs={store.shellArgs}
-                      autoCopy={store.autoCopy}
-                      rightClickPaste={store.rightClickPaste}
-                    />
+                    {isInActiveGroup && (
+                      <GroupPaneHeader
+                        sessionName={session?.name || ''}
+                        projectName={sessionProject?.name || ''}
+                        projectPath={projectPath}
+                        serverUrl={sessionServerUrls[sessionId] || null}
+                        activity={sessionActivity[sessionId] || null}
+                      />
+                    )}
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                      <TerminalArea
+                        ref={(() => {
+                          if (!terminalRefs.current[sessionId]) {
+                            terminalRefs.current[sessionId] = createRef();
+                          }
+                          return terminalRefs.current[sessionId];
+                        })()}
+                        sessionId={sessionId}
+                        layout={session!.layout}
+                        cwd={projectPath}
+                        onTerminalData={(data) => handleTerminalData(sessionId, data)}
+                        onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
+                        bgColor={store.terminalBgColor}
+                        isActive={isInActiveGroup || sessionId === store.activeSessionId}
+                        shellPath={store.shellPath}
+                        shellArgs={store.shellArgs}
+                        autoCopy={store.autoCopy}
+                        rightClickPaste={store.rightClickPaste}
+                      />
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {!store.activeSessionId && (
                   <div style={{

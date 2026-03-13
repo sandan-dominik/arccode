@@ -5,6 +5,7 @@ interface SessionItemProps {
   session: Session;
   index: number;
   isActive: boolean;
+  isSelected?: boolean;
   onSelect: () => void;
   onRemove: () => void;
   onRename: (name: string) => void;
@@ -14,6 +15,10 @@ interface SessionItemProps {
   dropTarget: 'above' | 'below' | null;
   activity: 'idle' | 'completed' | 'busy' | 'serving' | 'error' | null;
   serverUrl: string | null;
+  onToggleSelect?: () => void;
+  onGroupSelected?: () => void;
+  selectedCount?: number;
+  disableDrag?: boolean;
 }
 
 function timeAgo(ts: number): string {
@@ -24,23 +29,30 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function SessionItem({ session, index, isActive, onSelect, onRemove, onRename, onDragStart, onDragOver, onDrop, dropTarget, activity, serverUrl }: SessionItemProps) {
+export function SessionItem({ session, index, isActive, isSelected, onSelect, onRemove, onRename, onDragStart, onDragOver, onDrop, dropTarget, activity, serverUrl, onToggleSelect, onGroupSelected, selectedCount = 0, disableDrag }: SessionItemProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [groupMenu, setGroupMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(session.name);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!contextMenu) return;
+    if (!contextMenu && !groupMenu) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (contextMenu && menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
+        setConfirmRemove(false);
+      }
+      if (groupMenu && groupMenuRef.current && !groupMenuRef.current.contains(e.target as Node)) {
+        setGroupMenu(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [contextMenu]);
+  }, [contextMenu, groupMenu]);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -59,26 +71,44 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
 
   return (
     <div
-      draggable
-      onDragStart={(e) => {
+      draggable={!disableDrag}
+      onDragStart={disableDrag ? undefined : (e) => {
+        // Cancel drag when Ctrl is held so click can fire for selection
+        if (e.ctrlKey) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.effectAllowed = 'move';
         onDragStart(index);
       }}
-      onDragOver={(e) => onDragOver(e, index)}
-      onDrop={() => onDrop(index)}
-      onClick={onSelect}
+      onDragOver={disableDrag ? undefined : (e) => onDragOver(e, index)}
+      onDrop={disableDrag ? undefined : () => onDrop(index)}
+      onClick={(e) => {
+        if (e.ctrlKey && onToggleSelect) {
+          e.stopPropagation();
+          onToggleSelect();
+          return;
+        }
+        onSelect();
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
-        setContextMenu({ x: e.clientX, y: e.clientY });
+        // When this session is part of a multi-selection, show group menu
+        if (isSelected && selectedCount >= 2) {
+          setGroupMenu({ x: e.clientX, y: e.clientY });
+        } else {
+          setConfirmRemove(false);
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }
       }}
       style={{
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
         padding: '6px 12px 6px 11px',
-        cursor: 'grab',
-        borderLeft: isActive ? '2px solid var(--text-secondary)' : '2px solid transparent',
-        background: isActive ? 'var(--bg-hover)' : 'transparent',
+        cursor: disableDrag ? 'pointer' : 'grab',
+        borderLeft: isActive ? '2px solid var(--text-secondary)' : isSelected ? '2px solid rgba(239, 68, 68, 0.5)' : '2px solid transparent',
+        background: isActive ? 'var(--bg-hover)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
         borderRadius: 4,
         marginLeft: 0,
         marginBottom: 2,
@@ -86,10 +116,10 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
         borderBottom: dropTarget === 'below' ? '2px solid var(--text-secondary)' : '2px solid transparent',
       }}
       onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)';
+        if (!isActive && !isSelected) e.currentTarget.style.background = 'var(--bg-hover)';
       }}
       onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.background = 'transparent';
+        if (!isActive && !isSelected) e.currentTarget.style.background = 'transparent';
       }}
     >
       {activity === 'idle' && (
@@ -245,7 +275,71 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
         </span>
       </div>
 
-      {/* Context menu */}
+      {/* Group menu — shown when right-clicking a multi-selected session */}
+      {groupMenu && (
+        <div
+          ref={groupMenuRef}
+          style={{
+            position: 'fixed',
+            left: groupMenu.x,
+            top: groupMenu.y,
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '4px 0',
+            zIndex: 1000,
+            minWidth: 160,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          }}
+        >
+          <div style={{ padding: '4px 12px 6px', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            {selectedCount} sessions selected
+          </div>
+          {onGroupSelected && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setGroupMenu(null);
+                onGroupSelected();
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              Group Sessions
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setGroupMenu(null);
+              onToggleSelect?.();
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              padding: '6px 12px',
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            Deselect
+          </button>
+        </div>
+      )}
+
+      {/* Context menu — normal single-session menu */}
       {contextMenu && (
         <div
           ref={menuRef}
@@ -262,6 +356,27 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           }}
         >
+          {onToggleSelect && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setContextMenu(null);
+                onToggleSelect();
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              Select for Group
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -283,25 +398,64 @@ export function SessionItem({ session, index, isActive, onSelect, onRemove, onRe
             Rename
           </button>
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setContextMenu(null);
-              onRemove();
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              textAlign: 'left',
-              padding: '6px 12px',
-              fontSize: 12,
-              color: 'var(--danger)',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            Remove
-          </button>
+          {confirmRemove ? (
+            <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--danger)' }}>Remove?</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setContextMenu(null);
+                  setConfirmRemove(false);
+                  onRemove();
+                }}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'var(--danger)',
+                  border: 'none',
+                  borderRadius: 3,
+                  padding: '2px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmRemove(false);
+                }}
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  padding: '2px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmRemove(true);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--danger)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              Remove
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -14,6 +14,8 @@ interface HeaderBarProps {
   serverUrl: string | null;
   claudeDefault: ClaudeMode;
   openDefault: OpenDefault;
+  groupColor?: string | null;
+  onGroupColorChange?: ((color: string) => void) | null;
 }
 
 const LAYOUTS: { type: LayoutType; label: string; icon: string }[] = [
@@ -38,9 +40,14 @@ const CLAUDE_SHIELD_RED = (
   </svg>
 );
 
-const CLAUDE_OPTIONS: { mode: ClaudeMode; label: string; icon: React.ReactNode; cmd: string }[] = [
+const CODEX_ICON = (
+  <img src="assets://openai.svg" alt="" width="14" height="14" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+);
+
+const AI_OPTIONS: { mode: ClaudeMode; label: string; icon: React.ReactNode; cmd: string; brandIcon?: React.ReactNode }[] = [
   { mode: 'claude', label: 'Claude', icon: CLAUDE_SHIELD_GREEN, cmd: 'claude\r' },
   { mode: 'claude-yolo', label: 'Claude (skip permissions)', icon: CLAUDE_SHIELD_RED, cmd: 'claude --dangerously-skip-permissions\r' },
+  { mode: 'codex', label: 'Codex', icon: CODEX_ICON, cmd: 'codex\r', brandIcon: CODEX_ICON },
 ];
 
 const OPEN_OPTIONS: { mode: OpenDefault; label: string; icon: React.ReactNode }[] = [
@@ -59,6 +66,21 @@ const OPEN_OPTIONS: { mode: OpenDefault; label: string; icon: React.ReactNode }[
     ),
   },
 ];
+
+const Spinner = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" style={{ animation: 'hb-spin 0.8s linear infinite' }}>
+    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+    <path d="M14 8a6 6 0 0 0-6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+// Inject spinner keyframes once
+if (typeof document !== 'undefined' && !document.getElementById('hb-spinner-style')) {
+  const style = document.createElement('style');
+  style.id = 'hb-spinner-style';
+  style.textContent = '@keyframes hb-spin { to { transform: rotate(360deg) } }';
+  document.head.appendChild(style);
+}
 
 const btnBase = {
   display: 'flex',
@@ -84,6 +106,8 @@ export function HeaderBar({
   serverUrl,
   claudeDefault,
   openDefault,
+  groupColor,
+  onGroupColorChange,
 }: HeaderBarProps) {
   const [branch, setBranch] = useState('');
   const [editing, setEditing] = useState(false);
@@ -93,6 +117,10 @@ export function HeaderBar({
   const [scriptsOpen, setScriptsOpen] = useState(false);
   const [claudeOpen, setClaudeOpen] = useState(false);
   const [openMenuOpen, setOpenMenuOpen] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const [openLoading, setOpenLoading] = useState(false);
+  const [scriptLoading, setScriptLoading] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scriptsRef = useRef<HTMLDivElement>(null);
   const claudeRef = useRef<HTMLDivElement>(null);
@@ -128,23 +156,26 @@ export function HeaderBar({
 
   // Close any open dropdown on outside click
   useEffect(() => {
-    if (!scriptsOpen && !claudeOpen && !openMenuOpen) return;
+    if (!scriptsOpen && !claudeOpen && !openMenuOpen && !colorPickerOpen) return;
     const handler = (e: MouseEvent) => {
       if (scriptsOpen && scriptsRef.current && !scriptsRef.current.contains(e.target as Node)) setScriptsOpen(false);
       if (claudeOpen && claudeRef.current && !claudeRef.current.contains(e.target as Node)) setClaudeOpen(false);
       if (openMenuOpen && openMenuRef.current && !openMenuRef.current.contains(e.target as Node)) setOpenMenuOpen(false);
+      if (colorPickerOpen && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) setColorPickerOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [scriptsOpen, claudeOpen, openMenuOpen]);
+  }, [scriptsOpen, claudeOpen, openMenuOpen, colorPickerOpen]);
 
-  const claudeDefaultOption = CLAUDE_OPTIONS.find((o) => o.mode === claudeDefault) || CLAUDE_OPTIONS[0];
+  const claudeDefaultOption = AI_OPTIONS.find((o) => o.mode === claudeDefault) || AI_OPTIONS[0];
   const openDefaultOption = OPEN_OPTIONS.find((o) => o.mode === openDefault) || OPEN_OPTIONS[0];
 
   const handleOpen = (mode: OpenDefault) => {
-    if (!projectPath) return;
+    if (!projectPath || openLoading) return;
     if (mode === 'cursor') window.electronAPI.shell.openInCursor(projectPath);
     else window.electronAPI.shell.openInExplorer(projectPath);
+    setOpenLoading(true);
+    setTimeout(() => setOpenLoading(false), 5000);
   };
 
   return (
@@ -209,7 +240,74 @@ export function HeaderBar({
           </span>
         )}
 
-        {branch && (
+        {onGroupColorChange ? (
+          <div ref={colorPickerRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setColorPickerOpen(!colorPickerOpen)}
+              title="Group color"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '3px 8px',
+                borderRadius: 4,
+                background: 'var(--badge-bg)',
+                border: '1px solid var(--border)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{
+                display: 'inline-block',
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: groupColor || '#ef4444',
+                border: '1px solid rgba(255,255,255,0.2)',
+              }} />
+              <svg width="8" height="8" viewBox="0 0 8 8" style={{ marginLeft: 1 }}>
+                <path d="M1 3L4 6L7 3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+              </svg>
+            </button>
+            {colorPickerOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: 4,
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: 8,
+                zIndex: 1000,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: 6,
+              }}>
+                {['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#f5f5f5'].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => {
+                      onGroupColorChange(c);
+                      setColorPickerOpen(false);
+                    }}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      background: c,
+                      border: (groupColor || '#ef4444') === c ? '2px solid var(--text-primary)' : '1px solid rgba(255,255,255,0.15)',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : branch ? (
           <span style={{
             display: 'flex',
             alignItems: 'center',
@@ -222,7 +320,7 @@ export function HeaderBar({
             </svg>
             {branch}
           </span>
-        )}
+        ) : null}
 
         {serverUrl && (
           <button
@@ -287,34 +385,46 @@ export function HeaderBar({
                 overflowY: 'auto',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}>
-                {Object.entries(scripts).map(([name, cmd]) => (
-                  <button
-                    key={name}
-                    onClick={() => {
-                      setScriptsOpen(false);
-                      const fullCmd = `${pkgManager} run ${name}\r`;
-                      if (onRunScript) {
-                        onRunScript(name, fullCmd);
-                      } else {
-                        onRunCommand?.(fullCmd);
-                      }
-                    }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      color: 'var(--text-primary)',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    title={cmd}
-                  >
-                    <div style={{ fontWeight: 500 }}>{name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cmd}</div>
-                  </button>
-                ))}
+                {Object.entries(scripts).map(([name, cmd]) => {
+                  const isLoading = scriptLoading === name;
+                  return (
+                    <button
+                      key={name}
+                      disabled={isLoading}
+                      onClick={() => {
+                        setScriptsOpen(false);
+                        setScriptLoading(name);
+                        setTimeout(() => setScriptLoading(null), 2000);
+                        const fullCmd = `${pkgManager} run ${name}\r`;
+                        if (onRunScript) {
+                          onRunScript(name, fullCmd);
+                        } else {
+                          onRunCommand?.(fullCmd);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        color: 'var(--text-primary)',
+                        opacity: isLoading ? 0.6 : 1,
+                      }}
+                      onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      title={cmd}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500 }}>{name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cmd}</div>
+                      </div>
+                      {isLoading && <Spinner />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -333,9 +443,12 @@ export function HeaderBar({
                 borderRight: 'none',
               }}
             >
-              <img src="assets://claude.svg" alt="" width="14" height="14" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              Claude
-              {claudeDefaultOption.icon}
+              {claudeDefault === 'codex'
+                ? <img src="assets://openai.svg" alt="" width="14" height="14" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                : <img src="assets://claude.svg" alt="" width="14" height="14" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              }
+              {claudeDefaultOption.label}
+              {claudeDefault !== 'codex' && claudeDefaultOption.icon}
             </button>
             <button
               onClick={() => setClaudeOpen(!claudeOpen)}
@@ -363,7 +476,7 @@ export function HeaderBar({
                 minWidth: 200,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}>
-                {CLAUDE_OPTIONS.map((opt) => (
+                {AI_OPTIONS.map((opt) => (
                   <button
                     key={opt.mode}
                     onClick={() => {
@@ -406,23 +519,29 @@ export function HeaderBar({
           <div ref={openMenuRef} style={{ position: 'relative', display: 'flex' }}>
             <button
               onClick={() => handleOpen(openDefault)}
+              disabled={openLoading}
               title={`Open in ${openDefaultOption.label}`}
               style={{
                 ...btnBase,
                 padding: '4px 10px',
                 borderRadius: '5px 0 0 5px',
                 borderRight: 'none',
+                opacity: openLoading ? 0.6 : 1,
+                cursor: openLoading ? 'default' : undefined,
               }}
             >
-              {openDefaultOption.icon}
+              {openLoading ? <Spinner /> : openDefaultOption.icon}
               {openDefaultOption.label}
             </button>
             <button
               onClick={() => setOpenMenuOpen(!openMenuOpen)}
+              disabled={openLoading}
               style={{
                 ...btnBase,
                 padding: '4px 6px',
                 borderRadius: '0 5px 5px 0',
+                opacity: openLoading ? 0.6 : 1,
+                cursor: openLoading ? 'default' : undefined,
               }}
             >
               <svg width="8" height="8" viewBox="0 0 8 8">

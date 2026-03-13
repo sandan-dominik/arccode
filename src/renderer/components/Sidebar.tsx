@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Project } from '../types';
+import type { Project, SessionGroup } from '../types';
 import { ProjectItem } from './ProjectItem';
 
 interface SidebarProps {
@@ -12,9 +12,17 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
+  onReorderGroupSessions: (projectId: string, sessionIds: [string, string], toIndex: number) => void;
   sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
   onOpenSettings: () => void;
+  selectedSessionIds: Set<string>;
+  onToggleSelectSession: (sessionId: string) => void;
+  sessionGroups: SessionGroup[];
+  onGroupSessions: (sessionIds: [string, string]) => void;
+  onUngroupSessions: (groupId: string) => void;
+  onRenameGroup: (groupId: string, name: string) => void;
+  activeGroupId: string | null;
 }
 
 export function Sidebar({
@@ -27,9 +35,17 @@ export function Sidebar({
   onSelectSession,
   onRenameSession,
   onReorderSessions,
+  onReorderGroupSessions,
   sessionActivity,
   sessionServerUrls,
   onOpenSettings,
+  selectedSessionIds,
+  onToggleSelectSession,
+  sessionGroups,
+  onGroupSessions,
+  onUngroupSessions,
+  onRenameGroup,
+  activeGroupId,
 }: SidebarProps) {
   return (
     <div style={{
@@ -132,9 +148,17 @@ export function Sidebar({
             onRemoveSession={onRemoveSession}
             onRenameSession={onRenameSession}
             onReorderSessions={onReorderSessions}
+            onReorderGroupSessions={onReorderGroupSessions}
             sessionActivity={sessionActivity}
             sessionServerUrls={sessionServerUrls}
             onRemoveProject={() => onRemoveProject(project.id)}
+            selectedSessionIds={selectedSessionIds}
+            onToggleSelectSession={onToggleSelectSession}
+            sessionGroups={sessionGroups}
+            onGroupSessions={onGroupSessions}
+            onUngroupSessions={onUngroupSessions}
+            onRenameGroup={onRenameGroup}
+            activeGroupId={activeGroupId}
           />
         ))}
       </div>
