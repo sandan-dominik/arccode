@@ -16,6 +16,23 @@ ArcCode is a Windows Electron app for managing multiple Git Bash terminal sessio
 
 No test framework is configured.
 
+## Releasing
+
+Every release **must** include the Squirrel.Windows update artifacts so the in-app auto-updater works. Steps:
+
+1. Bump `version` in `package.json`
+2. Commit and push
+3. `npm run make` — produces artifacts in `out/make/squirrel.windows/x64/`
+4. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`
+5. Upload **all three** Squirrel artifacts:
+   ```
+   gh release upload vX.Y.Z \
+     "out/make/squirrel.windows/x64/ArcCode-X.Y.Z Setup.exe" \
+     "out/make/squirrel.windows/x64/arccode-X.Y.Z-full.nupkg" \
+     "out/make/squirrel.windows/x64/RELEASES"
+   ```
+   The `RELEASES` file and `.nupkg` are required for Squirrel delta updates. Without them, existing installs cannot auto-update.
+
 ## Architecture
 
 ### Process Model (Electron)
