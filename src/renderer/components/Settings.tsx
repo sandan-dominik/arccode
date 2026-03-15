@@ -24,6 +24,8 @@ interface SettingsProps {
   onAutoCopyChange: (enabled: boolean) => void;
   rightClickPaste: boolean;
   onRightClickPasteChange: (enabled: boolean) => void;
+  servingCommands: string[];
+  onServingCommandsChange: (commands: string[]) => void;
   onClose: () => void;
 }
 
@@ -37,8 +39,36 @@ const toggleBtnStyle = (active: boolean) => ({
   fontWeight: active ? 600 : 400,
 });
 
-export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgColorChange, shellPath, shellArgs, onShellConfigChange, claudeDefault, onClaudeDefaultChange, openDefault, onOpenDefaultChange, autoCopy, onAutoCopyChange, rightClickPaste, onRightClickPasteChange, onClose }: SettingsProps) {
+export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgColorChange, shellPath, shellArgs, onShellConfigChange, claudeDefault, onClaudeDefaultChange, openDefault, onOpenDefaultChange, autoCopy, onAutoCopyChange, rightClickPaste, onRightClickPasteChange, servingCommands, onServingCommandsChange, onClose }: SettingsProps) {
   const [customPath, setCustomPath] = useState(shellPath);
+  const [servingCommandInputs, setServingCommandInputs] = useState<string[]>(servingCommands.length ? servingCommands : ['']);
+
+  useEffect(() => {
+    setServingCommandInputs(servingCommands.length ? servingCommands : ['']);
+  }, [servingCommands]);
+
+  const commitServingCommands = (nextInputs: string[]) => {
+    setServingCommandInputs(nextInputs);
+    onServingCommandsChange(nextInputs);
+  };
+
+  const updateServingCommand = (index: number, value: string) => {
+    setServingCommandInputs((prev) => prev.map((entry, idx) => idx === index ? value : entry));
+  };
+
+  const commitServingCommandValue = (index: number, value: string) => {
+    const nextInputs = servingCommandInputs.map((entry, idx) => idx === index ? value : entry);
+    commitServingCommands(nextInputs);
+  };
+
+  const addServingCommandInput = () => {
+    setServingCommandInputs((prev) => [...prev, '']);
+  };
+
+  const removeServingCommandInput = (index: number) => {
+    const next = servingCommandInputs.filter((_, idx) => idx !== index);
+    commitServingCommands(next.length ? next : ['']);
+  };
   return (
     <div style={{
       height: '100%',
@@ -309,7 +339,7 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
           </div>
 
           {/* Copy / Paste */}
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+	          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 140 }}>
                 Auto Copy on Select
@@ -336,11 +366,76 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
                 </button>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              When enabled, selecting text auto-copies it and right-click pastes directly (skipping the context menu).
-            </div>
-          </div>
-        </div>
+	            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+	              When enabled, selecting text auto-copies it and right-click pastes directly (skipping the context menu).
+	            </div>
+	          </div>
+
+	          <div style={{ marginTop: 16 }}>
+	            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+	              <label style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 140 }}>
+	                Serving Commands
+	              </label>
+	              <button
+	                onClick={addServingCommandInput}
+	                style={{
+	                  fontSize: 11,
+	                  padding: '5px 10px',
+	                  borderRadius: 4,
+	                  border: '1px solid var(--border)',
+	                  background: 'var(--bg-surface)',
+	                  color: 'var(--text-primary)',
+	                }}
+	              >
+	                + Add
+	              </button>
+	            </div>
+	            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginLeft: 152 }}>
+	              {servingCommandInputs.map((command, index) => (
+	                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+	                  <input
+	                    type="text"
+	                    value={command}
+	                    placeholder="pnpm run dev:web"
+	                    onChange={(e) => updateServingCommand(index, e.target.value)}
+	                    onBlur={(e) => commitServingCommandValue(index, e.target.value)}
+	                    onKeyDown={(e) => {
+	                      if (e.key === 'Enter') {
+                          commitServingCommandValue(index, e.currentTarget.value);
+                        }
+	                    }}
+	                    style={{
+	                      flex: 1,
+	                      fontSize: 12,
+	                      padding: '5px 8px',
+	                      border: '1px solid var(--border)',
+	                      borderRadius: 4,
+	                      background: 'var(--bg-surface)',
+	                      color: 'var(--text-primary)',
+	                      fontFamily: "'Cascadia Code', 'Fira Code', monospace",
+	                    }}
+	                  />
+	                  <button
+	                    onClick={() => removeServingCommandInput(index)}
+	                    style={{
+	                      fontSize: 11,
+	                      padding: '5px 10px',
+	                      borderRadius: 4,
+	                      border: '1px solid var(--border)',
+	                      background: 'var(--bg-surface)',
+	                      color: 'var(--text-secondary)',
+	                    }}
+	                  >
+	                    Remove
+	                  </button>
+	                </div>
+	              ))}
+	            </div>
+	            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 152, marginTop: 6 }}>
+	              Add full commands here. Exact matches like `pnpm run dev:web` will stay in `serving`.
+	            </div>
+	          </div>
+	        </div>
 
         {/* Defaults */}
         <div style={{ marginBottom: 24 }}>
@@ -377,6 +472,14 @@ export function Settings({ theme, onThemeChange, terminalBgColor, onTerminalBgCo
               <button onClick={() => onClaudeDefaultChange('codex')} style={{ ...toggleBtnStyle(claudeDefault === 'codex'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <img src="assets://openai.svg" alt="" width="12" height="12" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 codex
+              </button>
+              <button onClick={() => onClaudeDefaultChange('codex-yolo')} style={{ ...toggleBtnStyle(claudeDefault === 'codex-yolo'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <img src="assets://openai.svg" alt="" width="12" height="12" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                codex yolo
+              </button>
+              <button onClick={() => onClaudeDefaultChange('codex-full-yolo')} style={{ ...toggleBtnStyle(claudeDefault === 'codex-full-yolo'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <img src="assets://openai.svg" alt="" width="12" height="12" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                codex full yolo
               </button>
             </div>
           </div>

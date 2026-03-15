@@ -26,12 +26,13 @@ export interface SessionGroup {
 
 export type ThemeMode = 'dark' | 'day-dark' | 'light';
 
-export type ClaudeMode = 'claude' | 'claude-yolo' | 'codex';
+export type ClaudeMode = 'claude' | 'claude-yolo' | 'codex' | 'codex-yolo' | 'codex-full-yolo';
 export type OpenDefault = 'cursor' | 'explorer';
 
 export interface StoreData {
   projects: Project[];
   activeSessionId: string | null;
+  sidebarWidth?: number;
   theme?: ThemeMode;
   terminalBgColor?: string;
   openedSessionIds?: string[];
@@ -41,6 +42,7 @@ export interface StoreData {
   openDefault?: OpenDefault;
   autoCopy?: boolean;
   rightClickPaste?: boolean;
+  servingCommands?: string[];
   sessionGroups?: SessionGroup[];
 }
 

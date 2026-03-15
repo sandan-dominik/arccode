@@ -13,8 +13,10 @@ function getDefaultGroupLayout(count: number): LayoutType {
 }
 
 export function useStore() {
+  const [servingCommands, setServingCommandsState] = useState<string[]>(['npm run dev', 'npm run start']);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sidebarWidth, setSidebarWidthState] = useState<number>(250);
   const [theme, setThemeState] = useState<ThemeMode>('dark');
   const [terminalBgColor, setTerminalBgColorState] = useState<string>('#171717');
   const [openedSessionIds, setOpenedSessionIds] = useState<Set<string>>(new Set());
@@ -30,6 +32,7 @@ export function useStore() {
   useEffect(() => {
     window.electronAPI.store.load().then((data) => {
       setProjects(data.projects);
+      if (data.sidebarWidth != null) setSidebarWidthState(data.sidebarWidth);
       // Don't restore active session — start on welcome screen
       // setActiveSessionId(data.activeSessionId);
       if (data.theme) setThemeState(data.theme);
@@ -41,6 +44,7 @@ export function useStore() {
       if (data.openDefault) setOpenDefaultState(data.openDefault);
       if (data.autoCopy != null) setAutoCopyState(data.autoCopy);
       if (data.rightClickPaste != null) setRightClickPasteState(data.rightClickPaste);
+      if (data.servingCommands) setServingCommandsState(data.servingCommands);
       if (data.sessionGroups) setSessionGroups(data.sessionGroups);
     });
   }, []);
@@ -65,6 +69,8 @@ export function useStore() {
   autoCopyRef.current = autoCopy;
   const rightClickPasteRef = useRef(rightClickPaste);
   rightClickPasteRef.current = rightClickPaste;
+  const servingCommandsRef = useRef(servingCommands);
+  servingCommandsRef.current = servingCommands;
   const sessionGroupsRef = useRef(sessionGroups);
   sessionGroupsRef.current = sessionGroups;
 
@@ -72,6 +78,7 @@ export function useStore() {
     const data: StoreData = {
       projects: newProjects,
       activeSessionId: newActiveId,
+      sidebarWidth,
       theme: newTheme,
       terminalBgColor: newBgColor,
       openedSessionIds: newOpenedIds ?? [...openedIdsRef.current],
@@ -81,20 +88,43 @@ export function useStore() {
       openDefault: openDefaultRef.current,
       autoCopy: autoCopyRef.current,
       rightClickPaste: rightClickPasteRef.current,
+      servingCommands: servingCommandsRef.current,
       sessionGroups: sessionGroupsRef.current.length ? sessionGroupsRef.current : undefined,
     };
     window.electronAPI.store.save(data);
-  }, []);
+  }, [sidebarWidth]);
 
   const setTheme = useCallback((newTheme: ThemeMode) => {
     setThemeState(newTheme);
     persist(projects, activeSessionId, newTheme, terminalBgColor);
   }, [projects, activeSessionId, terminalBgColor, persist]);
 
+  const setSidebarWidth = useCallback((width: number) => {
+    setSidebarWidthState(width);
+    window.electronAPI.store.save({
+      projects,
+      activeSessionId,
+      sidebarWidth: width,
+      theme,
+      terminalBgColor,
+      openedSessionIds: [...openedIdsRef.current],
+      shellPath: shellPathRef.current || undefined,
+      shellArgs: shellArgsRef.current.length ? shellArgsRef.current : undefined,
+      claudeDefault: claudeDefaultRef.current,
+      openDefault: openDefaultRef.current,
+      autoCopy: autoCopyRef.current,
+      rightClickPaste: rightClickPasteRef.current,
+      servingCommands: servingCommandsRef.current,
+      sessionGroups: sessionGroupsRef.current.length ? sessionGroupsRef.current : undefined,
+    });
+  }, [projects, activeSessionId, theme, terminalBgColor]);
+
   const markSessionOpened = useCallback((sessionId: string) => {
     setOpenedSessionIds((prev) => {
-      if (prev.has(sessionId)) return prev;
       const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      }
       next.add(sessionId);
       openedIdsRef.current = next;
       return next;
@@ -148,6 +178,17 @@ export function useStore() {
     persist(projects, activeSessionId, theme, terminalBgColor);
   }, [projects, activeSessionId, theme, terminalBgColor, persist]);
 
+  const setServingCommands = useCallback((commands: string[]) => {
+    const normalized = [...new Set(
+      commands
+        .map((command) => command.trim())
+        .filter(Boolean)
+    )];
+    setServingCommandsState(normalized);
+    servingCommandsRef.current = normalized;
+    persist(projects, activeSessionId, theme, terminalBgColor);
+  }, [projects, activeSessionId, theme, terminalBgColor, persist]);
+
   const addProject = useCallback(async () => {
     const dirPath = await window.electronAPI.dialog.openDirectory();
     if (!dirPath) return;
@@ -182,6 +223,19 @@ export function useStore() {
       return next;
     });
   }, [activeSessionId, theme, terminalBgColor, persist, closeSession]);
+
+  const reorderProjects = useCallback((fromIndex: number, toIndex: number) => {
+    setProjects((prev) => {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= prev.length || toIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      persist(next, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [activeSessionId, theme, terminalBgColor, persist]);
 
   const addSession = useCallback((projectId: string) => {
     setProjects((prev) => {
@@ -386,6 +440,8 @@ export function useStore() {
     activeSession,
     activeProject,
     openedSessionIds,
+    sidebarWidth,
+    setSidebarWidth,
     theme,
     setTheme,
     terminalBgColor,
@@ -401,8 +457,11 @@ export function useStore() {
     setAutoCopy,
     rightClickPaste,
     setRightClickPaste,
+    servingCommands,
+    setServingCommands,
     addProject,
     removeProject,
+    reorderProjects,
     addSession,
     removeSession,
     selectSession,

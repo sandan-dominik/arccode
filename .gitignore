@@ -93,3 +93,6 @@ out/
 
 # Build output
 dist/
+
+# Release build snapshot
+.release-build/

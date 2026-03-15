@@ -12,6 +12,7 @@ function getStorePath(): string {
 const DEFAULT_DATA: StoreData = {
   projects: [],
   activeSessionId: null,
+  sidebarWidth: 250,
 };
 
 export function loadStore(): StoreData {

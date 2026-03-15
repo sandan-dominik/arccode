@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Project, SessionGroup } from '../types';
 import { ProjectItem } from './ProjectItem';
 
@@ -7,6 +7,7 @@ interface SidebarProps {
   activeSessionId: string | null;
   onAddProject: () => void;
   onRemoveProject: (projectId: string) => void;
+  onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onAddSession: (projectId: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
@@ -31,6 +32,7 @@ export function Sidebar({
   activeSessionId,
   onAddProject,
   onRemoveProject,
+  onReorderProjects,
   onAddSession,
   onRemoveSession,
   onSelectSession,
@@ -49,6 +51,41 @@ export function Sidebar({
   onSetGroupLayout,
   activeGroupId,
 }: SidebarProps) {
+  const dragProjectIndexRef = useRef<number | null>(null);
+  const [dropProject, setDropProject] = useState<{ index: number; position: 'above' | 'below' } | null>(null);
+
+  const handleProjectDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragProjectIndexRef.current === null || dragProjectIndexRef.current === index) {
+      setDropProject(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+    setDropProject({ index, position });
+  };
+
+  const handleProjectDrop = (targetIndex: number) => {
+    const fromIndex = dragProjectIndexRef.current;
+    if (fromIndex === null || fromIndex === targetIndex) {
+      dragProjectIndexRef.current = null;
+      setDropProject(null);
+      return;
+    }
+    let toIndex = targetIndex;
+    if (dropProject?.position === 'below') {
+      toIndex += 1;
+    }
+    if (fromIndex < toIndex) {
+      toIndex -= 1;
+    }
+    if (fromIndex !== toIndex) {
+      onReorderProjects(fromIndex, toIndex);
+    }
+    dragProjectIndexRef.current = null;
+    setDropProject(null);
+  };
+
   return (
     <div style={{
       width: '100%',
@@ -110,12 +147,12 @@ export function Sidebar({
       </div>
 
       {/* Project list */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 8px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {projects.length === 0 && (
           <button
             onClick={onAddProject}
             style={{
-              margin: '12px 14px',
+              margin: '12px 6px',
               padding: '24px 14px',
               border: '2px dashed var(--border)',
               borderRadius: 8,
@@ -125,7 +162,7 @@ export function Sidebar({
               color: 'var(--text-muted)',
               fontSize: 12,
               lineHeight: 1.5,
-              width: 'calc(100% - 28px)',
+              width: 'calc(100% - 12px)',
               transition: 'border-color 0.15s, color 0.15s',
             }}
             onMouseEnter={e => {
@@ -140,7 +177,7 @@ export function Sidebar({
             + Create project
           </button>
         )}
-        {projects.map((project) => (
+        {projects.map((project, index) => (
           <ProjectItem
             key={project.id}
             project={project}
@@ -162,6 +199,14 @@ export function Sidebar({
             onRenameGroup={onRenameGroup}
             onSetGroupLayout={onSetGroupLayout}
             activeGroupId={activeGroupId}
+            dropTarget={dropProject?.index === index ? dropProject.position : null}
+            onProjectDragStart={() => { dragProjectIndexRef.current = index; }}
+            onProjectDragOver={(e) => handleProjectDragOver(e, index)}
+            onProjectDrop={() => handleProjectDrop(index)}
+            onProjectDragEnd={() => {
+              dragProjectIndexRef.current = null;
+              setDropProject(null);
+            }}
           />
         ))}
       </div>

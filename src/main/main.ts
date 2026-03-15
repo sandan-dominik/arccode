@@ -15,6 +15,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+const gotSingleInstanceLock = !started && app.requestSingleInstanceLock();
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -45,6 +46,15 @@ const createWindow = () => {
     mainWindow.webContents.openDevTools();
   }
 };
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 // --- IPC Handlers ---
 
@@ -229,7 +239,14 @@ function setupUpdater() {
   }, 30 * 60 * 1000);
 }
 
-app.on('ready', () => {
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    focusMainWindow();
+  });
+
+  app.on('ready', () => {
   // Set GPU cache path to avoid "Unable to move the cache" errors on Windows
   try {
     app.setPath('gpu-cache', path.join(app.getPath('userData'), 'gpu-cache'));
@@ -263,5 +280,8 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  } else {
+    focusMainWindow();
   }
 });
+}

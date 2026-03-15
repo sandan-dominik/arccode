@@ -29,6 +29,11 @@ interface ProjectItemProps {
   onRenameGroup: (groupId: string, name: string) => void;
   onSetGroupLayout: (groupId: string, layout: LayoutType) => void;
   activeGroupId: string | null;
+  dropTarget: 'above' | 'below' | null;
+  onProjectDragStart: () => void;
+  onProjectDragOver: (e: React.DragEvent) => void;
+  onProjectDrop: () => void;
+  onProjectDragEnd: () => void;
 }
 
 type Slot =
@@ -62,6 +67,11 @@ export function ProjectItem({
   onRenameGroup,
   onSetGroupLayout,
   activeGroupId,
+  dropTarget,
+  onProjectDragStart,
+  onProjectDragOver,
+  onProjectDrop,
+  onProjectDragEnd,
 }: ProjectItemProps) {
   const [expanded, setExpanded] = useState(true);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -183,16 +193,29 @@ export function ProjectItem({
     : `Group ${selectedProjectSessionIds.length} Sessions`;
 
   return (
-    <div>
+    <div
+      style={{
+        borderTop: dropTarget === 'above' ? '2px solid var(--text-secondary)' : '2px solid transparent',
+        borderBottom: dropTarget === 'below' ? '2px solid var(--text-secondary)' : '2px solid transparent',
+      }}
+    >
       <div
+        draggable
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '5px 12px 5px 16px',
-          cursor: 'pointer',
+          padding: '6px 10px 6px 12px',
+          cursor: 'grab',
           userSelect: 'none',
         }}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          onProjectDragStart();
+        }}
+        onDragOver={onProjectDragOver}
+        onDrop={onProjectDrop}
+        onDragEnd={onProjectDragEnd}
         onClick={() => setExpanded(!expanded)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -333,8 +356,10 @@ export function ProjectItem({
           onDragOver={(e) => e.preventDefault()}
           onDragEnd={() => { dragSlotRef.current = null; setDropSlot(null); }}
           style={{
-            marginLeft: 20,
+            marginLeft: 14,
             borderLeft: '1px solid var(--border)',
+            paddingLeft: 4,
+            paddingRight: 2,
             paddingTop: 6,
             paddingBottom: 6,
           }}
@@ -359,8 +384,7 @@ export function ProjectItem({
                     border: `1px solid ${hexToRgba(gc, 0.3)}`,
                     boxShadow: `inset 0 0 0 1px ${hexToRgba(gc, 0.3)}`,
                     borderRadius: 6,
-                    background: hexToRgba(gc, 0.08),
-                    margin: '6px 6px',
+                    margin: '6px 4px',
                     padding: '0 0 2px',
                     overflow: 'hidden',
                     borderTop: slotDropTarget === 'above' ? `2px solid var(--text-secondary)` : undefined,
@@ -387,8 +411,9 @@ export function ProjectItem({
                       display: 'flex',
                       alignItems: 'center',
                       gap: 5,
-                      padding: '4px 8px',
+                      padding: '4px 10px',
                       cursor: 'grab',
+                      background: hexToRgba(gc, 0.12),
                       borderBottom: `1px solid ${hexToRgba(gc, 0.15)}`,
                       marginBottom: 2,
                     }}

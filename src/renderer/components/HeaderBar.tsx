@@ -49,6 +49,8 @@ const AI_OPTIONS: { mode: ClaudeMode; label: string; icon: React.ReactNode; cmd:
   { mode: 'claude', label: 'Claude', icon: CLAUDE_SHIELD_GREEN, cmd: 'claude\r' },
   { mode: 'claude-yolo', label: 'Claude (skip permissions)', icon: CLAUDE_SHIELD_RED, cmd: 'claude --dangerously-skip-permissions\r' },
   { mode: 'codex', label: 'Codex', icon: CODEX_ICON, cmd: 'codex\r', brandIcon: CODEX_ICON },
+  { mode: 'codex-yolo', label: 'Codex yolo', icon: CODEX_ICON, cmd: 'codex --ask-for-approval never --sandbox workspace-write\r', brandIcon: CODEX_ICON },
+  { mode: 'codex-full-yolo', label: 'Codex full yolo', icon: CODEX_ICON, cmd: 'codex --ask-for-approval never --sandbox danger-full-access\r', brandIcon: CODEX_ICON },
 ];
 
 const OPEN_OPTIONS: { mode: OpenDefault; label: string; icon: React.ReactNode }[] = [
@@ -510,12 +512,12 @@ export function HeaderBar({
                 borderRight: 'none',
               }}
             >
-              {claudeDefault === 'codex'
+              {claudeDefault === 'codex' || claudeDefault === 'codex-yolo' || claudeDefault === 'codex-full-yolo'
                 ? <img src="assets://openai.svg" alt="" width="14" height="14" className="icon-invert" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 : <img src="assets://claude.svg" alt="" width="14" height="14" style={{ display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               }
               {claudeDefaultOption.label}
-              {claudeDefault !== 'codex' && claudeDefaultOption.icon}
+              {claudeDefault !== 'codex' && claudeDefault !== 'codex-yolo' && claudeDefault !== 'codex-full-yolo' && claudeDefaultOption.icon}
             </button>
             <button
               onClick={() => setClaudeOpen(!claudeOpen)}
