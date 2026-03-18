@@ -237,65 +237,71 @@ export function Sidebar({
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
-        {activeProjects.length === 0 && (
-          <button
-            onClick={onAddProject}
-            style={{
-              margin: '12px 6px',
-              padding: '24px 14px',
-              border: '2px dashed var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              cursor: 'pointer',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              lineHeight: 1.5,
-              width: 'calc(100% - 12px)',
-              transition: 'border-color 0.15s, color 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--text-muted)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.color = 'var(--text-muted)';
-            }}
-          >
-            + Create project
-          </button>
-        )}
-        {focusedProjectId && visibleProjects.length === 0 && activeProjects.length > 0 && (
-          <div style={{ margin: '8px 6px', color: 'var(--text-muted)', fontSize: 12 }}>
-            Focused project is unavailable.
+        <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div>
+            {activeProjects.length === 0 && (
+              <button
+                onClick={onAddProject}
+                style={{
+                  margin: '12px 6px',
+                  padding: '24px 14px',
+                  border: '2px dashed var(--border)',
+                  borderRadius: 8,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  width: 'calc(100% - 12px)',
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--text-muted)';
+                  e.currentTarget.style.color = 'var(--text-primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                }}
+              >
+                + Create project
+              </button>
+            )}
+            {focusedProjectId && visibleProjects.length === 0 && activeProjects.length > 0 && (
+              <div style={{ margin: '8px 6px', color: 'var(--text-muted)', fontSize: 12 }}>
+                Focused project is unavailable.
+              </div>
+            )}
+            {visibleProjects.map(renderProject)}
           </div>
-        )}
-        {visibleProjects.map(renderProject)}
-        {archivedProjects.length > 0 && !focusedProjectId && (
-          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setArchivedExpanded((prev) => !prev)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 8px',
-                color: 'var(--text-muted)',
-                fontSize: 11,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
-            >
-              <span>Archived</span>
-              <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: archivedExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>
-                <path d="M2 3L5 6L8 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-              </svg>
-            </button>
-            {archivedExpanded && archivedProjects.map(renderProject)}
-          </div>
-        )}
+          {archivedProjects.length > 0 && !focusedProjectId && (
+            <div style={{ marginTop: 'auto', paddingTop: 14 }}>
+              <div style={{ paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setArchivedExpanded((prev) => !prev)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 8px',
+                    color: 'var(--text-muted)',
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
+                  }}
+                >
+                  <span>Archived</span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: archivedExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>
+                    <path d="M2 3L5 6L8 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {archivedExpanded && archivedProjects.map(renderProject)}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{
