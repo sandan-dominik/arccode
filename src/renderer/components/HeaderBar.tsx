@@ -5,6 +5,7 @@ interface HeaderBarProps {
   projectName: string | null;
   projectPath: string | null;
   sessionName: string | null;
+  groupName?: string | null;
   onRenameSession: ((name: string) => void) | null;
   onRunCommand: ((cmd: string) => void) | null;
   onRunScript: ((scriptName: string, cmd: string) => void) | null;
@@ -88,6 +89,7 @@ export function HeaderBar({
   projectName,
   projectPath,
   sessionName,
+  groupName,
   onRenameSession,
   onRunCommand,
   onRunScript,
@@ -324,6 +326,19 @@ export function HeaderBar({
             color: 'var(--badge-text)',
           }}>
             {projectName}
+          </span>
+        )}
+
+        {groupName && (
+          <span style={{
+            fontSize: 11,
+            fontWeight: 500,
+            padding: '2px 8px',
+            borderRadius: 4,
+            background: 'var(--badge-bg)',
+            color: 'var(--text-muted)',
+          }}>
+            {groupName}
           </span>
         )}
 

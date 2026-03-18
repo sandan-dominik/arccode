@@ -4,6 +4,7 @@ export interface Project {
   path: string;
   sessions: Session[];
   isArchived?: boolean;
+  collapsed?: boolean;
 }
 
 export interface Session {

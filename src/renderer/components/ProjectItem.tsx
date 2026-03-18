@@ -41,6 +41,7 @@ interface ProjectItemProps {
   onProjectDragOver: (e: React.DragEvent) => void;
   onProjectDrop: () => void;
   onProjectDragEnd: () => void;
+  onToggleProjectCollapsed: () => void;
 }
 
 type Slot =
@@ -93,8 +94,8 @@ export function ProjectItem({
   onProjectDragOver,
   onProjectDrop,
   onProjectDragEnd,
+  onToggleProjectCollapsed,
 }: ProjectItemProps) {
-  const [expanded, setExpanded] = useState(true);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupValue, setEditGroupValue] = useState('');
   const groupInputRef = useRef<HTMLInputElement>(null);
@@ -418,7 +419,7 @@ export function ProjectItem({
         onDragOver={onProjectDragOver}
         onDrop={onProjectDrop}
         onDragEnd={onProjectDragEnd}
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggleProjectCollapsed}
         onContextMenu={(e) => {
           e.preventDefault();
           setConfirmRemoveProject(false);
@@ -449,7 +450,7 @@ export function ProjectItem({
               </button>
             </div>
           )}
-          <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: project.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>
             <path d="M2 3L5 6L8 3" stroke="var(--text-muted)" strokeWidth="1.5" fill="none" strokeLinecap="round" />
           </svg>
         </div>
@@ -473,7 +474,7 @@ export function ProjectItem({
         </div>
       )}
 
-      {expanded && (
+      {!project.collapsed && (
         <div onDragOver={(e) => e.preventDefault()} onDragEnd={() => { dragSlotRef.current = null; draggedSessionIdRef.current = null; draggedGroupedSessionRef.current = null; setDropSlot(null); setGroupDropTarget(null); }} style={{ marginLeft: 14, borderLeft: '1px solid var(--border)', paddingLeft: 4, paddingRight: 2, paddingTop: 6, paddingBottom: 6 }}>
           {slots.map((slot, slotIndex) => {
             if (slot.type === 'session') {

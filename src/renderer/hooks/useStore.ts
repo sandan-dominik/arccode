@@ -50,7 +50,11 @@ export function useStore() {
   // Load on mount
   useEffect(() => {
     window.electronAPI.store.load().then((data) => {
-      const normalizedProjects = data.projects.map((project) => ({ ...project, isArchived: project.isArchived ?? false }));
+      const normalizedProjects = data.projects.map((project) => ({
+        ...project,
+        isArchived: project.isArchived ?? false,
+        collapsed: project.collapsed ?? false,
+      }));
       setProjects(normalizedProjects);
       if (data.focusedProjectId != null && normalizedProjects.some((project) => project.id === data.focusedProjectId && !project.isArchived)) {
         setFocusedProjectIdState(data.focusedProjectId);
@@ -299,6 +303,18 @@ export function useStore() {
     });
   }, [activeSessionId, theme, terminalBgColor, persist]);
 
+  const toggleProjectCollapsed = useCallback((projectId: string) => {
+    setProjects((prev) => {
+      const next = prev.map((project) => (
+        project.id === projectId
+          ? { ...project, collapsed: !project.collapsed }
+          : project
+      ));
+      persist(next, activeSessionId, theme, terminalBgColor);
+      return next;
+    });
+  }, [activeSessionId, theme, terminalBgColor, persist]);
+
   const addSession = useCallback((projectId: string) => {
     setProjects((prev) => {
       const project = prev.find((p) => p.id === projectId);
@@ -325,6 +341,7 @@ export function useStore() {
 
   const addSessionToGroup = useCallback((projectId: string, groupId: string) => {
     let nextSessionId: string | null = null;
+    let nextProjectsSnapshot: Project[] | null = null;
 
     setProjects((prev) => {
       const project = prev.find((p) => p.id === projectId);
@@ -343,6 +360,7 @@ export function useStore() {
       const next = prev.map((p) =>
         p.id === projectId ? { ...p, sessions: [...p.sessions, session] } : p
       );
+      nextProjectsSnapshot = next;
       setActiveSessionId(session.id);
       markSessionOpened(session.id);
       persist(next, session.id, theme, terminalBgColor, [...openedIdsRef.current]);
@@ -361,7 +379,7 @@ export function useStore() {
           : group
       ));
       sessionGroupsRef.current = next;
-      persist(projects, nextSessionId, theme, terminalBgColor, [...openedIdsRef.current]);
+      persist(nextProjectsSnapshot || projects, nextSessionId, theme, terminalBgColor, [...openedIdsRef.current]);
       return next;
     });
 
@@ -784,6 +802,7 @@ export function useStore() {
     unarchiveProject,
     setFocusedProjectId,
     reorderProjects,
+    toggleProjectCollapsed,
     addSession,
     addSessionToGroup,
     removeSession,

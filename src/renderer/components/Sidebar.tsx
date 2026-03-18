@@ -14,6 +14,7 @@ interface SidebarProps {
   onFocusProject: (projectId: string | null) => void;
   onExitFocusMode: () => void;
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
+  onToggleProjectCollapsed: (projectId: string) => void;
   onAddSession: (projectId: string) => void;
   onAddSessionToGroup: (projectId: string, groupId: string) => void;
   onRemoveSession: (sessionId: string) => void;
@@ -53,6 +54,7 @@ export function Sidebar({
   onFocusProject,
   onExitFocusMode,
   onReorderProjects,
+  onToggleProjectCollapsed,
   onAddSession,
   onAddSessionToGroup,
   onRemoveSession,
@@ -140,6 +142,7 @@ export function Sidebar({
         onReorderSessions={onReorderSessions}
         onReorderGroupSessions={onReorderGroupSessions}
         onReorderSessionWithinGroup={onReorderSessionWithinGroup}
+        onToggleProjectCollapsed={() => onToggleProjectCollapsed(project.id)}
         sessionActivity={sessionActivity}
         sessionServerUrls={sessionServerUrls}
         onArchiveProject={() => onArchiveProject(project.id)}

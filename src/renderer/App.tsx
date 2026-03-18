@@ -620,6 +620,10 @@ export function App() {
     setActiveSplitGroupId(null);
   }, [store.selectSession]);
 
+  const activeSessionGroup = store.activeSessionId
+    ? store.sessionGroups.find((group) => group.sessionIds.includes(store.activeSessionId!)) || null
+    : null;
+
   const activeSplitGroupEntry = store.sessionGroups
     .flatMap((group) => (group.splitGroups || []).map((splitGroup) => ({ group, splitGroup })))
     .find(({ splitGroup }) => splitGroup.id === activeSplitGroupId) || null;
@@ -665,6 +669,7 @@ export function App() {
             onFocusProject={store.setFocusedProjectId}
             onExitFocusMode={() => store.setFocusedProjectId(null)}
             onReorderProjects={store.reorderProjects}
+            onToggleProjectCollapsed={store.toggleProjectCollapsed}
             onAddSession={store.addSession}
             onAddSessionToGroup={store.addSessionToGroup}
             onRemoveSession={store.removeSession}
@@ -724,6 +729,7 @@ export function App() {
                   projectName={null}
                   projectPath={store.activeProject?.path || null}
                   sessionName={activeSplitGroup.name}
+                  groupName={activeSplitOwner.name}
                   onRenameSession={(name: string) => store.renameSessionSplitGroup(activeSplitOwner.id, activeSplitGroup.id, name)}
                   claudeDefault={store.claudeDefault}
                   openDefault={store.openDefault}
@@ -744,6 +750,7 @@ export function App() {
                   projectName={store.activeProject?.name || null}
                   projectPath={store.activeProject?.path || null}
                   sessionName={store.activeSession?.name || null}
+                  groupName={activeSessionGroup?.name || null}
                   onRenameSession={store.activeSession
                     ? (name: string) => store.renameSession(store.activeSession!.id, name)
                     : null
@@ -757,6 +764,11 @@ export function App() {
                   }
                   onRunScript={store.activeSessionId
                     ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
+                    : null
+                  }
+                  groupColor={activeSessionGroup?.color || null}
+                  onGroupColorChange={activeSessionGroup
+                    ? (color: string) => store.updateGroupColor(activeSessionGroup.id, color)
                     : null
                   }
                 />
