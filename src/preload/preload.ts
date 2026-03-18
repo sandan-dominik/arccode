@@ -38,6 +38,23 @@ const api: ElectronAPI = {
   },
   app: {
     getVersion: () => ipcRenderer.sendSync('app:getVersion'),
+    getPlatform: () => ipcRenderer.sendSync('app:getPlatform'),
+  },
+  window: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    unmaximize: () => ipcRenderer.send('window:unmaximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onStateChange: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: { isMaximized: boolean }) => {
+        callback(state);
+      };
+      ipcRenderer.on('window:state', handler);
+      return () => {
+        ipcRenderer.removeListener('window:state', handler);
+      };
+    },
   },
   updater: {
     check: () => ipcRenderer.send('updater:check'),

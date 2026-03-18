@@ -12,6 +12,7 @@ function getStorePath(): string {
 const DEFAULT_DATA: StoreData = {
   projects: [],
   activeSessionId: null,
+  focusedProjectId: null,
   sidebarWidth: 250,
 };
 

@@ -4,6 +4,7 @@ import 'allotment/dist/style.css';
 import { Sidebar } from './components/Sidebar';
 import { HeaderBar } from './components/HeaderBar';
 import { TerminalArea } from './components/TerminalArea';
+import { WindowTitleBar } from './components/WindowTitleBar';
 import type { TerminalPaneHandle } from './components/TerminalPane';
 import { Settings } from './components/Settings';
 import { useStore } from './hooks/useStore';
@@ -14,13 +15,6 @@ function getDefaultGroupLayout(count: number): LayoutType {
   if (count === 3) return 'three';
   if (count === 2) return 'vsplit';
   return 'single';
-}
-
-function getAvailableGroupLayouts(count: number): LayoutType[] {
-  if (count >= 4) return ['grid'];
-  if (count === 3) return ['three'];
-  if (count === 2) return ['vsplit'];
-  return ['single'];
 }
 
 function getGroupPaneStyle(layout: LayoutType, count: number, index: number): React.CSSProperties {
@@ -173,7 +167,10 @@ export function App() {
   const chimeSuppressUntilRef = useRef<Record<string, number>>({});
   const terminalRefs = useRef<Record<string, React.RefObject<TerminalPaneHandle | null>>>({});
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [activeSplitGroupId, setActiveSplitGroupId] = useState<string | null>(null);
+  const [projectSwitcherVisible, setProjectSwitcherVisible] = useState(false);
+  const [projectSwitcherProjectId, setProjectSwitcherProjectId] = useState<string | null>(null);
+  const [pendingRenameGroupId, setPendingRenameGroupId] = useState<string | null>(null);
 
   // How long after last PTY output before we consider a command "done"
   const OUTPUT_GAP_MS = 2000;
@@ -285,9 +282,11 @@ export function App() {
   }, []);
 
   // Detect crash/error patterns in PTY output (case-insensitive, stripped of ANSI codes)
-  const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)/;
+  const SERVER_URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/[^\s]*)?/i;
   // const ERROR_RE = /\bERROR\b|npm ERR!/;
   const errorDetectedRef = useRef<Record<string, boolean>>({});
+  const ansiEscapeRe = useRef(new RegExp(`${String.fromCharCode(27)}(?:\\[[0-9;?]*[ -/]*[@-~]|[@-Z\\\\-_])`, 'g'));
+  const ptyOutputBufferRef = useRef<Record<string, string>>({});
 
   // ── PTY output handler ──
   // Strategy: every output chunk resets a 2s debounce timer.
@@ -297,9 +296,13 @@ export function App() {
     const currentState = runtimeActivityRef.current[sessionId];
     if (!currentState) return;
 
+    const plain = data.replace(ansiEscapeRe.current, '');
+    const buffered = `${ptyOutputBufferRef.current[sessionId] || ''}${plain}`.slice(-4096);
+    ptyOutputBufferRef.current[sessionId] = buffered;
+
     // Capture server URL from output only when already in serving mode (triggered by command detection)
     if (currentState === 'serving' && !serverUrlFoundRef.current[sessionId]) {
-      const match = data.match(SERVER_URL_RE);
+      const match = buffered.match(SERVER_URL_RE);
       if (match) {
         const url = match[0].replace('0.0.0.0', 'localhost');
         serverUrlFoundRef.current[sessionId] = true;
@@ -373,6 +376,7 @@ export function App() {
 
   const clearServerActivity = useCallback((sessionId: string) => {
     serverUrlFoundRef.current[sessionId] = false;
+    ptyOutputBufferRef.current[sessionId] = '';
     setSessionServerUrls((prev) => {
       if (!(sessionId in prev)) return prev;
       const next = { ...prev };
@@ -430,6 +434,74 @@ export function App() {
     }
   }
 
+  const focusModeProjects = store.projects.filter((project) => !project.isArchived);
+
+  const applyFocusedProject = useCallback((projectId: string) => {
+    const project = store.projects.find((entry) => entry.id === projectId);
+    if (!project) return;
+
+    store.setFocusedProjectId(projectId);
+    setActiveSplitGroupId(null);
+    setSelectedSessionIds(new Set());
+    setShowSettings(false);
+
+    const recentSession = Array.from(store.openedSessionIds)
+      .reverse()
+      .map((sessionId) => project.sessions.find((session) => session.id === sessionId) || null)
+      .find((session): session is Session => session !== null);
+    const nextSession = recentSession || project.sessions[0] || null;
+    if (nextSession) {
+      store.selectSession(nextSession.id);
+    }
+  }, [store]);
+
+  useEffect(() => {
+    if (!store.focusedProjectId || focusModeProjects.length < 2) {
+      if (projectSwitcherVisible) setProjectSwitcherVisible(false);
+      if (projectSwitcherProjectId) setProjectSwitcherProjectId(null);
+      return;
+    }
+
+    const cycleProjects = (direction: 1 | -1) => {
+      const currentId = projectSwitcherVisible && projectSwitcherProjectId
+        ? projectSwitcherProjectId
+        : store.focusedProjectId;
+      const currentIndex = Math.max(0, focusModeProjects.findIndex((project) => project.id === currentId));
+      const nextIndex = (currentIndex + direction + focusModeProjects.length) % focusModeProjects.length;
+      setProjectSwitcherProjectId(focusModeProjects[nextIndex]?.id || null);
+      setProjectSwitcherVisible(true);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey && event.key === 'Tab')) return;
+      event.preventDefault();
+      cycleProjects(event.shiftKey ? -1 : 1);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== 'Control') return;
+      if (projectSwitcherVisible && projectSwitcherProjectId) {
+        applyFocusedProject(projectSwitcherProjectId);
+      }
+      setProjectSwitcherVisible(false);
+      setProjectSwitcherProjectId(null);
+    };
+
+    const handleBlur = () => {
+      setProjectSwitcherVisible(false);
+      setProjectSwitcherProjectId(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [applyFocusedProject, focusModeProjects, projectSwitcherProjectId, projectSwitcherVisible, store.focusedProjectId]);
+
   const handleTerminalData = useCallback((sessionId: string, data: string) => {
     // Ctrl+C clears interactive flag so output gap detection resumes
     if (data === '\x03') {
@@ -447,7 +519,7 @@ export function App() {
         store.updateSessionLastCommand(sessionId, cmd);
         // Detect server-like commands → serving mode immediately
         if (isServingCommand(cmd)) {
-          setRuntimeActivity(sessionId, 'serving');
+          markServing(sessionId);
         } else {
           // Any command → busy (works from idle, completed, or already busy)
           markBusy(sessionId);
@@ -463,7 +535,7 @@ export function App() {
     } else if (data.length === 1 && data >= ' ') {
       inputBufferRef.current[sessionId] = (inputBufferRef.current[sessionId] || '') + data;
     }
-  }, [clearServerActivity, isServingCommand, markBusy, setRuntimeActivity, store.updateSessionLastCommand]);
+  }, [clearServerActivity, isServingCommand, markBusy, markServing, store.updateSessionLastCommand]);
 
   const handleToggleSelectSession = useCallback((sessionId: string) => {
     setSelectedSessionIds((prev) => {
@@ -478,42 +550,86 @@ export function App() {
     const groupId = store.addSessionGroup(sessionIds);
     if (!groupId) return;
     setSelectedSessionIds(new Set());
-    // Mark grouped sessions as opened and activate the group
+    setPendingRenameGroupId(groupId);
     for (const id of sessionIds) {
       store.selectSession(id);
     }
-    setActiveGroupId(groupId);
   }, [store.addSessionGroup, store.selectSession]);
 
   const handleUngroupSessions = useCallback((groupId: string) => {
     store.removeSessionGroup(groupId);
-    if (activeGroupId === groupId) setActiveGroupId(null);
-  }, [store.removeSessionGroup, activeGroupId]);
+    const activeSplitOwner = store.sessionGroups.find((group) => (group.splitGroups || []).some((splitGroup) => splitGroup.id === activeSplitGroupId));
+    if (activeSplitOwner?.id === groupId) setActiveSplitGroupId(null);
+  }, [store.removeSessionGroup, store.sessionGroups, activeSplitGroupId]);
 
-  // When selecting a session, check if it's part of a group and activate the group
+  const handleCreateSplitGroup = useCallback((groupId: string, sessionIds: string[]) => {
+    const splitGroupId = store.createSessionSplitGroup(groupId, sessionIds);
+    if (!splitGroupId) return;
+    setSelectedSessionIds(new Set());
+    for (const id of sessionIds) {
+      store.selectSession(id);
+    }
+    setActiveSplitGroupId(splitGroupId);
+  }, [store.createSessionSplitGroup, store.selectSession]);
+
+  useEffect(() => {
+    const handleShortcutKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'g' && key !== 's') return;
+
+      const selectedIds = Array.from(selectedSessionIds).slice(0, 4);
+      if (selectedIds.length < 2) return;
+
+      if (key === 'g') {
+        event.preventDefault();
+        handleGroupSessions(selectedIds);
+        return;
+      }
+
+      const groups = selectedIds
+        .map((sessionId) => store.sessionGroups.find((group) => group.sessionIds.includes(sessionId)) || null);
+      const commonGroup = groups[0];
+      const inSameGroup = !!commonGroup && groups.every((group) => group?.id === commonGroup.id);
+      if (!inSameGroup || !commonGroup) return;
+
+      event.preventDefault();
+      handleCreateSplitGroup(commonGroup.id, selectedIds);
+    };
+
+    window.addEventListener('keydown', handleShortcutKeyDown);
+    return () => window.removeEventListener('keydown', handleShortcutKeyDown);
+  }, [handleCreateSplitGroup, handleGroupSessions, selectedSessionIds, store.sessionGroups]);
+
+  const handleSelectSplitGroup = useCallback((groupId: string, splitGroupId: string) => {
+    setShowSettings(false);
+    const group = store.sessionGroups.find((entry) => entry.id === groupId);
+    const splitGroup = group?.splitGroups?.find((entry) => entry.id === splitGroupId);
+    if (!group || !splitGroup) return;
+    setSelectedSessionIds(new Set());
+    for (const id of splitGroup.sessionIds) {
+      store.selectSession(id);
+    }
+    setActiveSplitGroupId(splitGroupId);
+  }, [store.selectSession, store.sessionGroups]);
+
   const handleSelectSession = useCallback((sessionId: string) => {
     setShowSettings(false);
     store.selectSession(sessionId);
     setSelectedSessionIds(new Set());
-    const group = store.sessionGroups.find((g) => g.sessionIds.includes(sessionId));
-    if (group) {
-      setActiveGroupId(group.id);
-      // Make sure both sessions are opened
-      for (const id of group.sessionIds) {
-        store.selectSession(id);
-      }
-    } else {
-      setActiveGroupId(null);
-    }
-  }, [store.selectSession, store.sessionGroups]);
+    setActiveSplitGroupId(null);
+  }, [store.selectSession]);
 
-  // Find the active group for rendering
-  const activeGroup = activeGroupId ? store.sessionGroups.find((g) => g.id === activeGroupId) || null : null;
-  const activeGroupLayout = activeGroup?.layout || getDefaultGroupLayout(activeGroup?.sessionIds.length || 0);
-  const activeGroupSessionIds = activeGroup
-    ? activeGroup.sessionIds.filter((sessionId) => sessionProjectMap.has(sessionId))
+  const activeSplitGroupEntry = store.sessionGroups
+    .flatMap((group) => (group.splitGroups || []).map((splitGroup) => ({ group, splitGroup })))
+    .find(({ splitGroup }) => splitGroup.id === activeSplitGroupId) || null;
+  const activeSplitGroup = activeSplitGroupEntry?.splitGroup || null;
+  const activeSplitOwner = activeSplitGroupEntry?.group || null;
+  const activeSplitLayout = activeSplitGroup?.layout || getDefaultGroupLayout(activeSplitGroup?.sessionIds.length || 0);
+  const activeSplitSessionIds = activeSplitGroup
+    ? activeSplitGroup.sessionIds.filter((sessionId) => sessionProjectMap.has(sessionId))
     : [];
-  const activeGroupSessions = activeGroupSessionIds
+  const activeSplitSessions = activeSplitSessionIds
     .map((sessionId) => {
       const project = store.projects.find((p) => p.sessions.some((s) => s.id === sessionId)) || null;
       const session = project?.sessions.find((s) => s.id === sessionId) || null;
@@ -521,10 +637,12 @@ export function App() {
       return { sessionId, project, session };
     })
     .filter(Boolean) as Array<{ sessionId: string; project: Project; session: Session }>;
-  const activeGroupIndexBySessionId = new Map(activeGroupSessionIds.map((sessionId, index) => [sessionId, index]));
+  const activeSplitIndexBySessionId = new Map(activeSplitSessionIds.map((sessionId, index) => [sessionId, index]));
 
   return (
-    <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)' }}>
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
+      <WindowTitleBar />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       <Allotment
         proportionalLayout={false}
         onChange={(sizes) => {
@@ -537,27 +655,41 @@ export function App() {
         <Allotment.Pane preferredSize={store.sidebarWidth} minSize={160} maxSize={360}>
           <Sidebar
             projects={store.projects}
+            focusedProjectId={store.focusedProjectId}
             activeSessionId={store.activeSessionId}
+            activeSplitGroupId={activeSplitGroupId}
             onAddProject={store.addProject}
             onRemoveProject={store.removeProject}
+            onArchiveProject={store.archiveProject}
+            onUnarchiveProject={store.unarchiveProject}
+            onFocusProject={store.setFocusedProjectId}
+            onExitFocusMode={() => store.setFocusedProjectId(null)}
             onReorderProjects={store.reorderProjects}
             onAddSession={store.addSession}
+            onAddSessionToGroup={store.addSessionToGroup}
             onRemoveSession={store.removeSession}
             onSelectSession={handleSelectSession}
             onRenameSession={store.renameSession}
             onReorderSessions={store.reorderSessions}
             onReorderGroupSessions={store.reorderGroupSessions}
+            onReorderSessionWithinGroup={store.reorderSessionWithinGroup}
             sessionActivity={sessionActivity}
             sessionServerUrls={sessionServerUrls}
             onOpenSettings={() => setShowSettings(true)}
             selectedSessionIds={selectedSessionIds}
             onToggleSelectSession={handleToggleSelectSession}
             sessionGroups={store.sessionGroups}
+            pendingRenameGroupId={pendingRenameGroupId}
+            onPendingRenameHandled={() => setPendingRenameGroupId(null)}
             onGroupSessions={handleGroupSessions}
             onUngroupSessions={handleUngroupSessions}
             onRenameGroup={store.renameSessionGroup}
-            onSetGroupLayout={(groupId, layout) => store.updateGroupLayout(groupId, layout)}
-            activeGroupId={activeGroupId}
+            onToggleGroupCollapsed={store.toggleSessionGroupCollapsed}
+            onCreateSplitGroup={handleCreateSplitGroup}
+            onSelectSplitGroup={handleSelectSplitGroup}
+            onRemoveSplitGroup={store.removeSessionSplitGroup}
+            onAddSessionsToGroup={store.addSessionsToGroup}
+            onRemoveSessionsFromGroups={store.removeSessionsFromGroups}
           />
         </Allotment.Pane>
         <Allotment.Pane>
@@ -587,16 +719,12 @@ export function App() {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-primary)', visibility: showSettings ? 'hidden' : 'visible' }}>
-              {activeGroup ? (
+              {activeSplitGroup && activeSplitOwner ? (
                 <HeaderBar
                   projectName={null}
                   projectPath={store.activeProject?.path || null}
-                  sessionName={activeGroup.name}
-                  layout={activeGroupLayout}
-                  availableLayouts={getAvailableGroupLayouts(activeGroupSessionIds.length)}
-                  onLayoutChange={(layout) => store.updateGroupLayout(activeGroup.id, layout)}
-                  onNewSession={null}
-                  onRenameSession={(name: string) => store.renameSessionGroup(activeGroup.id, name)}
+                  sessionName={activeSplitGroup.name}
+                  onRenameSession={(name: string) => store.renameSessionSplitGroup(activeSplitOwner.id, activeSplitGroup.id, name)}
                   claudeDefault={store.claudeDefault}
                   openDefault={store.openDefault}
                   serverUrl={store.activeSessionId ? sessionServerUrls[store.activeSessionId] || null : null}
@@ -608,24 +736,14 @@ export function App() {
                     ? (scriptName: string, cmd: string) => handleRunScript(store.activeSessionId!, scriptName, cmd)
                     : null
                   }
-                  groupColor={activeGroup.color || null}
-                  onGroupColorChange={(color: string) => store.updateGroupColor(activeGroup.id, color)}
+                  groupColor={activeSplitOwner.color || null}
+                  onGroupColorChange={(color: string) => store.updateGroupColor(activeSplitOwner.id, color)}
                 />
               ) : store.activeSessionId ? (
                 <HeaderBar
                   projectName={store.activeProject?.name || null}
                   projectPath={store.activeProject?.path || null}
                   sessionName={store.activeSession?.name || null}
-                  layout={store.activeSession?.layout || null}
-                  onLayoutChange={(layout) => {
-                    if (store.activeSession) {
-                      store.setSessionLayout(store.activeSession.id, layout);
-                    }
-                  }}
-                  onNewSession={store.activeProject
-                    ? () => store.addSession(store.activeProject!.id)
-                    : null
-                  }
                   onRenameSession={store.activeSession
                     ? (name: string) => store.renameSession(store.activeSession!.id, name)
                     : null
@@ -645,20 +763,20 @@ export function App() {
               ) : null}
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 {[...sessionProjectMap.entries()].map(([sessionId, { session, projectPath }]) => {
-                  const groupIndex = activeGroup ? activeGroupIndexBySessionId.get(sessionId) : undefined;
-                  const isInActiveGroup = groupIndex != null;
-                  const isVisible = !showSettings && (isInActiveGroup || sessionId === store.activeSessionId);
-                  const groupSession = isInActiveGroup
-                    ? activeGroupSessions[groupIndex]
+                  const splitIndex = activeSplitGroup ? activeSplitIndexBySessionId.get(sessionId) : undefined;
+                  const isInActiveSplit = splitIndex != null;
+                  const isVisible = !showSettings && (isInActiveSplit || sessionId === store.activeSessionId);
+                  const splitSession = isInActiveSplit
+                    ? activeSplitSessions[splitIndex]
                     : null;
-                  const paneStyle = isInActiveGroup
-                    ? getGroupPaneStyle(activeGroupLayout, activeGroupSessions.length, groupIndex)
+                  const paneStyle = isInActiveSplit
+                    ? getGroupPaneStyle(activeSplitLayout, activeSplitSessions.length, splitIndex)
                     : { top: '0%', left: '0%', width: '100%', height: '100%' };
 
                   return (
                     <div
                       key={sessionId}
-                      onMouseDown={isInActiveGroup ? () => {
+                      onMouseDown={isInActiveSplit ? () => {
                         if (store.activeSessionId !== sessionId) {
                           store.selectSession(sessionId);
                         }
@@ -670,19 +788,19 @@ export function App() {
                         flexDirection: 'column',
                         visibility: isVisible ? 'visible' : 'hidden',
                         pointerEvents: isVisible ? 'auto' : 'none',
-                        borderRight: isInActiveGroup && activeGroupLayout !== 'grid' && groupIndex < activeGroupSessions.length - 1
+                        borderRight: isInActiveSplit && activeSplitLayout !== 'grid' && splitIndex < activeSplitSessions.length - 1
                           ? '1px solid var(--border)'
                           : undefined,
-                        borderBottom: isInActiveGroup && activeGroupLayout === 'grid' && groupIndex < 2
+                        borderBottom: isInActiveSplit && activeSplitLayout === 'grid' && splitIndex < 2
                           ? '1px solid var(--border)'
                           : undefined,
                       }}
                     >
-                      {groupSession && (
+                      {splitSession && (
                         <GroupPaneHeader
-                          sessionName={groupSession.session.name}
-                          projectName={groupSession.project.name}
-                          projectPath={groupSession.project.path}
+                          sessionName={splitSession.session.name}
+                          projectName={splitSession.project.name}
+                          projectPath={splitSession.project.path}
                           serverUrl={sessionServerUrls[sessionId] || null}
                           activity={sessionActivity[sessionId] || null}
                         />
@@ -701,7 +819,7 @@ export function App() {
                           onTerminalData={(data) => handleTerminalData(sessionId, data)}
                           onPtyOutput={(data) => handlePtyOutput(sessionId, data)}
                           bgColor={store.terminalBgColor}
-                          isActive={isInActiveGroup || sessionId === store.activeSessionId}
+                          isActive={isInActiveSplit || sessionId === store.activeSessionId}
                           shellPath={store.shellPath}
                           shellArgs={store.shellArgs}
                           autoCopy={store.autoCopy}
@@ -812,6 +930,86 @@ export function App() {
           </div>
         </Allotment.Pane>
       </Allotment>
+      {projectSwitcherVisible && projectSwitcherProjectId && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.22)',
+            pointerEvents: 'none',
+            zIndex: 40,
+          }}
+        >
+          <div
+            style={{
+              minWidth: 420,
+              maxWidth: 760,
+              padding: 14,
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'rgba(16, 16, 16, 0.96)',
+              boxShadow: '0 22px 60px rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1.1, marginBottom: 12 }}>
+              Project Switcher
+            </div>
+            <div style={{ display: 'grid', gap: 10, alignItems: 'stretch', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr))' }}>
+              {focusModeProjects.map((project) => {
+                const isActive = project.id === projectSwitcherProjectId;
+                const terminalCount = project.sessions.length;
+                return (
+                  <div
+                    key={project.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      background: isActive ? 'rgba(38, 38, 38, 0.96)' : 'rgba(26, 26, 26, 0.96)',
+                      border: isActive ? '1px solid rgba(34, 197, 94, 0.45)' : '1px solid rgba(255,255,255,0.06)',
+                      boxShadow: isActive ? 'inset 0 0 0 1px rgba(34, 197, 94, 0.12)' : 'inset 0 0 0 1px rgba(255,255,255,0.02)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <span style={{
+                        display: 'inline-block',
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: isActive ? 'var(--activity-serving)' : 'rgba(255,255,255,0.18)',
+                        flexShrink: 0,
+                        boxShadow: isActive ? '0 0 10px rgba(34,197,94,0.35)' : 'none',
+                      }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {project.name}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                        {isActive ? 'Selected' : 'Queued'}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                        {terminalCount} terminal{terminalCount === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 10 }}>
+              Hold `Ctrl`, press `Tab` to cycle, release `Ctrl` to switch.
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

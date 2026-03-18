@@ -77,16 +77,22 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
     <div
       draggable={!disableDrag}
       onDragStart={disableDrag ? undefined : (e) => {
-        // Cancel drag when Ctrl is held so click can fire for selection
         if (e.ctrlKey) {
           e.preventDefault();
           return;
         }
+        e.stopPropagation();
         e.dataTransfer.effectAllowed = 'move';
         onDragStart(index);
       }}
-      onDragOver={disableDrag ? undefined : (e) => onDragOver(e, index)}
-      onDrop={disableDrag ? undefined : () => onDrop(index)}
+      onDragOver={disableDrag ? undefined : (e) => {
+        e.stopPropagation();
+        onDragOver(e, index);
+      }}
+      onDrop={disableDrag ? undefined : (e) => {
+        e.stopPropagation();
+        onDrop(index);
+      }}
       onClick={(e) => {
         if (e.ctrlKey && onToggleSelect) {
           e.stopPropagation();
@@ -111,9 +117,10 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
         justifyContent: 'space-between',
         padding: '6px 12px',
         cursor: disableDrag ? 'pointer' : 'grab',
-        background: isActive ? 'var(--bg-hover)' : isSelected ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+        background: isActive || isSelected ? 'var(--bg-hover)' : 'transparent',
         borderRadius: 4,
         margin: '0 4px 2px',
+        outline: isSelected && !isActive ? '1px solid var(--border)' : 'none',
         borderTop: dropTarget === 'above' ? '2px solid var(--text-secondary)' : '2px solid transparent',
         borderBottom: dropTarget === 'below' ? '2px solid var(--text-secondary)' : '2px solid transparent',
       }}
@@ -277,7 +284,6 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
         </span>
       </div>
 
-      {/* Group menu — shown when right-clicking a multi-selected session */}
       {groupMenu && (
         <div
           ref={groupMenuRef}
@@ -342,7 +348,6 @@ export function SessionItem({ session, index, isActive, isSelected, onSelect, on
         </div>
       )}
 
-      {/* Context menu — normal single-session menu */}
       {contextMenu && (
         <div
           ref={menuRef}

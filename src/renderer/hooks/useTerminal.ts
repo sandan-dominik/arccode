@@ -77,6 +77,31 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
 
     term.open(container);
 
+    term.attachCustomKeyEventHandler((event) => {
+      const isProjectSwitcherKey = event.ctrlKey && event.key === 'Tab';
+      const isControlKeyRelease = event.type === 'keyup' && event.key === 'Control';
+      const isGroupingShortcut = event.ctrlKey && !event.altKey && !event.metaKey && ['g', 'G', 's', 'S'].includes(event.key);
+      const isCommandPaletteShortcut = event.ctrlKey && !event.altKey && !event.metaKey && ['k', 'K'].includes(event.key);
+
+      if (isProjectSwitcherKey || isControlKeyRelease || isGroupingShortcut || isCommandPaletteShortcut) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.dispatchEvent(new KeyboardEvent(event.type, {
+          key: event.key,
+          code: event.code,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          metaKey: event.metaKey,
+          repeat: event.repeat,
+          bubbles: true,
+        }));
+        return false;
+      }
+
+      return true;
+    });
+
     // Set container bg to match terminal
     container.style.background = options.bgColor || '#171717';
 
@@ -110,6 +135,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
 
     // Listen for PTY data
     let resizeSuppressUntil = 0;
+    let hasSeenInitialResize = false;
     const removeDataListener = window.electronAPI.pty.onData((id, data) => {
       if (id === ptyIdRef.current) {
         term.write(data);
@@ -205,7 +231,11 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
           fitAddon.fit();
           if (ptyIdRef.current) {
             window.electronAPI.pty.resize(ptyIdRef.current, term.cols, term.rows);
-            resizeSuppressUntil = Date.now() + 2000;
+            if (hasSeenInitialResize) {
+              resizeSuppressUntil = Date.now() + 2000;
+            } else {
+              hasSeenInitialResize = true;
+            }
           }
         } catch {
           // ignore

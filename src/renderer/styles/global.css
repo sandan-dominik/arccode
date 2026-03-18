@@ -72,6 +72,10 @@ html, body, #root {
   font-size: 13px;
 }
 
+body {
+  border: 1px solid var(--border);
+}
+
 button {
   font-family: inherit;
   cursor: pointer;

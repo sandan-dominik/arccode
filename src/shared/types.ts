@@ -3,6 +3,7 @@ export interface Project {
   name: string;
   path: string;
   sessions: Session[];
+  isArchived?: boolean;
 }
 
 export interface Session {
@@ -16,12 +17,20 @@ export interface Session {
 
 export type LayoutType = 'single' | 'hsplit' | 'vsplit' | 'three' | 'grid';
 
+export interface SessionSplitGroup {
+  id: string;
+  name: string;
+  sessionIds: string[];
+  layout?: LayoutType;
+}
+
 export interface SessionGroup {
   id: string;
   name: string;
   color?: string;
   sessionIds: string[];
-  layout?: LayoutType;
+  collapsed?: boolean;
+  splitGroups?: SessionSplitGroup[];
 }
 
 export type ThemeMode = 'dark' | 'day-dark' | 'light';
@@ -32,6 +41,7 @@ export type OpenDefault = 'cursor' | 'explorer';
 export interface StoreData {
   projects: Project[];
   activeSessionId: string | null;
+  focusedProjectId?: string | null;
   sidebarWidth?: number;
   theme?: ThemeMode;
   terminalBgColor?: string;
@@ -75,6 +85,15 @@ export interface ElectronAPI {
   };
   app: {
     getVersion: () => string;
+    getPlatform: () => string;
+  };
+  window: {
+    minimize: () => void;
+    maximize: () => void;
+    unmaximize: () => void;
+    close: () => void;
+    isMaximized: () => Promise<boolean>;
+    onStateChange: (callback: (state: { isMaximized: boolean }) => void) => () => void;
   };
   updater: {
     check: () => void;

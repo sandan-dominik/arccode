@@ -15,7 +15,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
-const gotSingleInstanceLock = !started && app.requestSingleInstanceLock();
+const isDevInstance = !app.isPackaged || !!MAIN_WINDOW_VITE_DEV_SERVER_URL || process.env.NODE_ENV === 'development';
+const gotSingleInstanceLock = isDevInstance ? true : (!started && app.requestSingleInstanceLock());
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -23,6 +24,7 @@ const createWindow = () => {
     height: 800,
     minWidth: 800,
     minHeight: 500,
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
@@ -33,6 +35,17 @@ const createWindow = () => {
     autoHideMenuBar: true,
     backgroundColor: '#171717',
   });
+
+  const emitWindowState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:state', { isMaximized: mainWindow.isMaximized() });
+    }
+  };
+
+  mainWindow.on('maximize', emitWindowState);
+  mainWindow.on('unmaximize', emitWindowState);
+  mainWindow.on('enter-full-screen', emitWindowState);
+  mainWindow.on('leave-full-screen', emitWindowState);
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -83,6 +96,25 @@ function setupIPC() {
   // App
   ipcMain.on('app:getVersion', (event) => {
     event.returnValue = app.getVersion();
+  });
+  ipcMain.on('app:getPlatform', (event) => {
+    event.returnValue = process.platform;
+  });
+
+  ipcMain.on('window:minimize', () => {
+    mainWindow?.minimize();
+  });
+  ipcMain.on('window:maximize', () => {
+    mainWindow?.maximize();
+  });
+  ipcMain.on('window:unmaximize', () => {
+    mainWindow?.unmaximize();
+  });
+  ipcMain.on('window:close', () => {
+    mainWindow?.close();
+  });
+  ipcMain.handle('window:isMaximized', () => {
+    return mainWindow?.isMaximized() || false;
   });
 
   // Store

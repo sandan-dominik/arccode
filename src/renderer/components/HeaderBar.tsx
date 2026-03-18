@@ -1,14 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import type { LayoutType, ClaudeMode, OpenDefault } from '../types';
+import type { ClaudeMode, OpenDefault } from '../types';
 
 interface HeaderBarProps {
   projectName: string | null;
   projectPath: string | null;
   sessionName: string | null;
-  layout: LayoutType | null;
-  availableLayouts?: LayoutType[];
-  onLayoutChange: (layout: LayoutType) => void;
-  onNewSession: (() => void) | null;
   onRenameSession: ((name: string) => void) | null;
   onRunCommand: ((cmd: string) => void) | null;
   onRunScript: ((scriptName: string, cmd: string) => void) | null;
@@ -18,14 +14,6 @@ interface HeaderBarProps {
   groupColor?: string | null;
   onGroupColorChange?: ((color: string) => void) | null;
 }
-
-const LAYOUTS: { type: LayoutType; label: string; icon: string }[] = [
-  { type: 'single', label: 'Single', icon: '[ ]' },
-  { type: 'hsplit', label: 'H-Split', icon: '[-]' },
-  { type: 'vsplit', label: 'V-Split', icon: '[|]' },
-  { type: 'three', label: '3 Pane', icon: '[=|]' },
-  { type: 'grid', label: '2x2', icon: '[#]' },
-];
 
 const CLAUDE_SHIELD_GREEN = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -100,10 +88,6 @@ export function HeaderBar({
   projectName,
   projectPath,
   sessionName,
-  layout,
-  availableLayouts,
-  onLayoutChange,
-  onNewSession,
   onRenameSession,
   onRunCommand,
   onRunScript,
@@ -121,16 +105,19 @@ export function HeaderBar({
   const [scriptsOpen, setScriptsOpen] = useState(false);
   const [claudeOpen, setClaudeOpen] = useState(false);
   const [openMenuOpen, setOpenMenuOpen] = useState(false);
-  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [commandActiveIndex, setCommandActiveIndex] = useState(0);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const [openLoading, setOpenLoading] = useState(false);
   const [scriptLoading, setScriptLoading] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const commandInputRef = useRef<HTMLInputElement>(null);
   const scriptsRef = useRef<HTMLDivElement>(null);
   const claudeRef = useRef<HTMLDivElement>(null);
   const openMenuRef = useRef<HTMLDivElement>(null);
-  const layoutMenuRef = useRef<HTMLDivElement>(null);
+  const commandRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -138,6 +125,13 @@ export function HeaderBar({
       inputRef.current.select();
     }
   }, [editing]);
+
+  useEffect(() => {
+    if (commandOpen && commandInputRef.current) {
+      commandInputRef.current.focus();
+      commandInputRef.current.select();
+    }
+  }, [commandOpen]);
 
   const commitRename = () => {
     const trimmed = editValue.trim();
@@ -162,22 +156,20 @@ export function HeaderBar({
 
   // Close any open dropdown on outside click
   useEffect(() => {
-    if (!scriptsOpen && !claudeOpen && !openMenuOpen && !colorPickerOpen && !layoutMenuOpen) return;
+    if (!scriptsOpen && !claudeOpen && !openMenuOpen && !colorPickerOpen && !commandOpen) return;
     const handler = (e: MouseEvent) => {
       if (scriptsOpen && scriptsRef.current && !scriptsRef.current.contains(e.target as Node)) setScriptsOpen(false);
       if (claudeOpen && claudeRef.current && !claudeRef.current.contains(e.target as Node)) setClaudeOpen(false);
       if (openMenuOpen && openMenuRef.current && !openMenuRef.current.contains(e.target as Node)) setOpenMenuOpen(false);
-      if (layoutMenuOpen && layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) setLayoutMenuOpen(false);
       if (colorPickerOpen && colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) setColorPickerOpen(false);
+      if (commandOpen && commandRef.current && !commandRef.current.contains(e.target as Node)) setCommandOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [scriptsOpen, claudeOpen, openMenuOpen, colorPickerOpen, layoutMenuOpen]);
+  }, [scriptsOpen, claudeOpen, openMenuOpen, colorPickerOpen, commandOpen]);
 
   const claudeDefaultOption = AI_OPTIONS.find((o) => o.mode === claudeDefault) || AI_OPTIONS[0];
   const openDefaultOption = OPEN_OPTIONS.find((o) => o.mode === openDefault) || OPEN_OPTIONS[0];
-  const visibleLayouts = LAYOUTS.filter((item) => (availableLayouts || LAYOUTS.map((entry) => entry.type)).includes(item.type));
-  const activeLayout = visibleLayouts.find((item) => item.type === layout) || visibleLayouts[0] || null;
 
   const handleOpen = (mode: OpenDefault) => {
     if (!projectPath || openLoading) return;
@@ -185,6 +177,92 @@ export function HeaderBar({
     else window.electronAPI.shell.openInExplorer(projectPath);
     setOpenLoading(true);
     setTimeout(() => setOpenLoading(false), 5000);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== 'k') return;
+
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (isTypingTarget) return;
+
+      event.preventDefault();
+      setCommandQuery('');
+      setCommandActiveIndex(0);
+      setCommandOpen(true);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCommandOpen(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  const commandItems: { id: string; label: string; detail: string; keywords: string; icon: React.ReactNode; action: () => void }[] = [
+    ...Object.entries(scripts).map(([name, cmd]) => ({
+      id: `script:${name}`,
+      label: `Run script: ${name}`,
+      detail: cmd,
+      keywords: `${name} ${cmd} script run ${pkgManager}`,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M5.5 2.5L10.5 8L5.5 13.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      action: () => {
+        const fullCmd = `${pkgManager} run ${name}\r`;
+        setScriptLoading(name);
+        setTimeout(() => setScriptLoading(null), 2000);
+        if (onRunScript) onRunScript(name, fullCmd);
+        else onRunCommand?.(fullCmd);
+      },
+    })),
+    ...AI_OPTIONS.map((opt) => ({
+      id: `ai:${opt.mode}`,
+      label: opt.label,
+      detail: 'Run in terminal',
+      keywords: `${opt.label} ai terminal ${opt.mode}`,
+      icon: opt.brandIcon || opt.icon,
+      action: () => onRunCommand?.(opt.cmd),
+    })),
+    ...OPEN_OPTIONS.map((opt) => ({
+      id: `open:${opt.mode}`,
+      label: `Open in ${opt.label}`,
+      detail: projectPath || '',
+      keywords: `${opt.label} open project folder`,
+      icon: opt.icon,
+      action: () => handleOpen(opt.mode),
+    })),
+  ].filter((item) => {
+    if (item.id.startsWith('script:')) return projectPath && Object.keys(scripts).length > 0;
+    if (item.id.startsWith('ai:')) return !!onRunCommand;
+    if (item.id.startsWith('open:')) return !!projectPath;
+    return true;
+  });
+
+  const normalizedCommandQuery = commandQuery.trim().toLowerCase();
+  const filteredCommandItems = normalizedCommandQuery
+    ? commandItems.filter((item) => `${item.label} ${item.detail} ${item.keywords}`.toLowerCase().includes(normalizedCommandQuery))
+    : commandItems;
+
+  useEffect(() => {
+    if (!commandOpen) return;
+    setCommandActiveIndex(0);
+  }, [commandOpen, normalizedCommandQuery]);
+
+  const runCommandItem = (index: number) => {
+    const item = filteredCommandItems[index];
+    if (!item) return;
+    setCommandOpen(false);
+    item.action();
   };
 
   return (
@@ -359,65 +437,21 @@ export function HeaderBar({
 
       {/* Right: Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {layout && activeLayout && (
-          <div ref={layoutMenuRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setLayoutMenuOpen(!layoutMenuOpen)}
-              style={{
-                ...btnBase,
-                padding: '4px 10px',
-                borderRadius: 5,
-              }}
-            >
-              <span style={{ fontFamily: 'monospace' }}>{activeLayout.icon}</span>
-              Split
-              <svg width="8" height="8" viewBox="0 0 8 8" style={{ marginLeft: 2 }}>
-                <path d="M1 3L4 6L7 3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-              </svg>
-            </button>
-            {layoutMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 4,
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                padding: '4px 0',
-                zIndex: 1000,
-                minWidth: 170,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              }}>
-                {visibleLayouts.map((item) => (
-                  <button
-                    key={item.type}
-                    onClick={() => {
-                      setLayoutMenuOpen(false);
-                      onLayoutChange(item.type);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '6px 12px',
-                      fontSize: 12,
-                      color: 'var(--text-primary)',
-                      fontWeight: item.type === layout ? 600 : 400,
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <span style={{ fontFamily: 'monospace' }}>{item.icon}</span>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={() => {
+            setCommandQuery('');
+            setCommandActiveIndex(0);
+            setCommandOpen(true);
+          }}
+          style={{
+            ...btnBase,
+            padding: '4px 10px',
+            borderRadius: 5,
+          }}
+        >
+          Command
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Ctrl+K</span>
+        </button>
 
         {/* Scripts dropdown */}
         {projectPath && Object.keys(scripts).length > 0 && (
@@ -668,6 +702,103 @@ export function HeaderBar({
           </div>
         )}
       </div>
+      {commandOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.18)',
+            zIndex: 1500,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: 72,
+          }}
+        >
+          <div
+            ref={commandRef}
+            style={{
+              width: 560,
+              maxWidth: 'calc(100vw - 40px)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: 10, borderBottom: '1px solid var(--border)' }}>
+              <input
+                ref={commandInputRef}
+                value={commandQuery}
+                onChange={(e) => setCommandQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setCommandActiveIndex((current) => Math.min(current + 1, Math.max(filteredCommandItems.length - 1, 0)));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setCommandActiveIndex((current) => Math.max(current - 1, 0));
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    runCommandItem(commandActiveIndex);
+                  }
+                }}
+                placeholder="Search scripts, Claude, Codex, Cursor, Explorer..."
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                }}
+              />
+            </div>
+            <div style={{ maxHeight: 360, overflowY: 'auto', padding: '6px 0' }}>
+              {filteredCommandItems.length === 0 ? (
+                <div style={{ padding: '18px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+                  No matching commands.
+                </div>
+              ) : filteredCommandItems.map((item, index) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    runCommandItem(index);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '10px 14px',
+                    fontSize: 12,
+                    color: 'var(--text-primary)',
+                    background: commandActiveIndex === index ? 'var(--bg-hover)' : 'transparent',
+                  }}
+                  onMouseEnter={() => setCommandActiveIndex(index)}
+                >
+                  <div style={{ width: 18, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {item.icon}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{item.label}</div>
+                    {item.detail && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.detail}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {item.id.startsWith('script:') ? 'Script' : item.id.startsWith('ai:') ? 'AI' : 'Open'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

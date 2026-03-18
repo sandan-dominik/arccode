@@ -4,55 +4,90 @@ import { ProjectItem } from './ProjectItem';
 
 interface SidebarProps {
   projects: Project[];
+  focusedProjectId: string | null;
   activeSessionId: string | null;
+  activeSplitGroupId: string | null;
   onAddProject: () => void;
   onRemoveProject: (projectId: string) => void;
+  onArchiveProject: (projectId: string) => void;
+  onUnarchiveProject: (projectId: string) => void;
+  onFocusProject: (projectId: string | null) => void;
+  onExitFocusMode: () => void;
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onAddSession: (projectId: string) => void;
+  onAddSessionToGroup: (projectId: string, groupId: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onReorderSessions: (projectId: string, fromIndex: number, toIndex: number) => void;
   onReorderGroupSessions: (projectId: string, sessionIds: string[], toIndex: number) => void;
+  onReorderSessionWithinGroup: (projectId: string, groupId: string, fromSessionId: string, toSessionId: string, position: 'above' | 'below') => void;
   sessionActivity: Record<string, 'idle' | 'completed' | 'busy' | 'serving' | 'error'>;
   sessionServerUrls: Record<string, string>;
   onOpenSettings: () => void;
   selectedSessionIds: Set<string>;
   onToggleSelectSession: (sessionId: string) => void;
   sessionGroups: SessionGroup[];
+  pendingRenameGroupId: string | null;
+  onPendingRenameHandled: () => void;
   onGroupSessions: (sessionIds: string[]) => void;
   onUngroupSessions: (groupId: string) => void;
   onRenameGroup: (groupId: string, name: string) => void;
-  onSetGroupLayout: (groupId: string, layout: NonNullable<SessionGroup['layout']>) => void;
-  activeGroupId: string | null;
+  onToggleGroupCollapsed: (groupId: string) => void;
+  onCreateSplitGroup: (groupId: string, sessionIds: string[]) => void;
+  onSelectSplitGroup: (groupId: string, splitGroupId: string) => void;
+  onRemoveSplitGroup: (groupId: string, splitGroupId: string) => void;
+  onAddSessionsToGroup: (groupId: string, sessionIds: string[]) => void;
+  onRemoveSessionsFromGroups: (sessionIds: string[]) => void;
 }
 
 export function Sidebar({
   projects,
+  focusedProjectId,
   activeSessionId,
+  activeSplitGroupId,
   onAddProject,
   onRemoveProject,
+  onArchiveProject,
+  onUnarchiveProject,
+  onFocusProject,
+  onExitFocusMode,
   onReorderProjects,
   onAddSession,
+  onAddSessionToGroup,
   onRemoveSession,
   onSelectSession,
   onRenameSession,
   onReorderSessions,
   onReorderGroupSessions,
+  onReorderSessionWithinGroup,
   sessionActivity,
   sessionServerUrls,
   onOpenSettings,
   selectedSessionIds,
   onToggleSelectSession,
   sessionGroups,
+  pendingRenameGroupId,
+  onPendingRenameHandled,
   onGroupSessions,
   onUngroupSessions,
   onRenameGroup,
-  onSetGroupLayout,
-  activeGroupId,
+  onToggleGroupCollapsed,
+  onCreateSplitGroup,
+  onSelectSplitGroup,
+  onRemoveSplitGroup,
+  onAddSessionsToGroup,
+  onRemoveSessionsFromGroups,
 }: SidebarProps) {
   const dragProjectIndexRef = useRef<number | null>(null);
   const [dropProject, setDropProject] = useState<{ index: number; position: 'above' | 'below' } | null>(null);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+
+  const activeProjects = projects.filter((project) => !project.isArchived);
+  const archivedProjects = projects.filter((project) => project.isArchived);
+  const visibleProjects = focusedProjectId
+    ? activeProjects.filter((project) => project.id === focusedProjectId)
+    : activeProjects;
 
   const handleProjectDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
@@ -86,6 +121,58 @@ export function Sidebar({
     setDropProject(null);
   };
 
+  const renderProject = (project: Project) => {
+    const projectIndex = projects.findIndex((entry) => entry.id === project.id);
+    if (projectIndex === -1) return null;
+
+    return (
+      <ProjectItem
+        key={project.id}
+        project={project}
+        activeSessionId={activeSessionId}
+        activeSplitGroupId={activeSplitGroupId}
+        onSelectSession={onSelectSession}
+        onSelectSplitGroup={onSelectSplitGroup}
+        onAddSession={() => onAddSession(project.id)}
+        onAddSessionToGroup={(groupId) => onAddSessionToGroup(project.id, groupId)}
+        onRemoveSession={onRemoveSession}
+        onRenameSession={onRenameSession}
+        onReorderSessions={onReorderSessions}
+        onReorderGroupSessions={onReorderGroupSessions}
+        onReorderSessionWithinGroup={onReorderSessionWithinGroup}
+        sessionActivity={sessionActivity}
+        sessionServerUrls={sessionServerUrls}
+        onArchiveProject={() => onArchiveProject(project.id)}
+        onUnarchiveProject={() => onUnarchiveProject(project.id)}
+        onRemoveProject={() => onRemoveProject(project.id)}
+        onFocusProject={() => onFocusProject(project.id)}
+        onExitFocusMode={onExitFocusMode}
+        isFocused={focusedProjectId === project.id}
+        selectedSessionIds={selectedSessionIds}
+        onToggleSelectSession={onToggleSelectSession}
+        sessionGroups={sessionGroups}
+        pendingRenameGroupId={pendingRenameGroupId}
+        onPendingRenameHandled={onPendingRenameHandled}
+        onGroupSessions={onGroupSessions}
+        onUngroupSessions={onUngroupSessions}
+        onRenameGroup={onRenameGroup}
+        onToggleGroupCollapsed={onToggleGroupCollapsed}
+        onCreateSplitGroup={onCreateSplitGroup}
+        onRemoveSplitGroup={onRemoveSplitGroup}
+        onAddSessionsToGroup={onAddSessionsToGroup}
+        onRemoveSessionsFromGroups={onRemoveSessionsFromGroups}
+        dropTarget={dropProject?.index === projectIndex ? dropProject.position : null}
+        onProjectDragStart={() => { dragProjectIndexRef.current = projectIndex; }}
+        onProjectDragOver={(e) => handleProjectDragOver(e, projectIndex)}
+        onProjectDrop={() => handleProjectDrop(projectIndex)}
+        onProjectDragEnd={() => {
+          dragProjectIndexRef.current = null;
+          setDropProject(null);
+        }}
+      />
+    );
+  };
+
   return (
     <div style={{
       width: '100%',
@@ -95,7 +182,6 @@ export function Sidebar({
       background: 'var(--bg-secondary)',
       borderRight: '1px solid var(--border)',
     }}>
-      {/* Logo */}
       <div style={{
         padding: '14px 14px 10px',
         display: 'flex',
@@ -116,7 +202,6 @@ export function Sidebar({
         </span>
       </div>
 
-      {/* PROJECTS header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -132,23 +217,24 @@ export function Sidebar({
         }}>
           Projects
         </span>
-        <button
-          onClick={onAddProject}
-          title="Add project folder"
-          style={{
-            fontSize: 15,
-            lineHeight: 1,
-            color: 'var(--text-muted)',
-            padding: 0,
-          }}
-        >
-          +
-        </button>
+        {!focusedProjectId && (
+          <button
+            onClick={onAddProject}
+            title="Add project folder"
+            style={{
+              fontSize: 15,
+              lineHeight: 1,
+              color: 'var(--text-muted)',
+              padding: 0,
+            }}
+          >
+            +
+          </button>
+        )}
       </div>
 
-      {/* Project list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
-        {projects.length === 0 && (
+        {activeProjects.length === 0 && (
           <button
             onClick={onAddProject}
             style={{
@@ -165,11 +251,11 @@ export function Sidebar({
               width: 'calc(100% - 12px)',
               transition: 'border-color 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => {
+            onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--text-muted)';
               e.currentTarget.style.color = 'var(--text-primary)';
             }}
-            onMouseLeave={e => {
+            onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'var(--border)';
               e.currentTarget.style.color = 'var(--text-muted)';
             }}
@@ -177,46 +263,61 @@ export function Sidebar({
             + Create project
           </button>
         )}
-        {projects.map((project, index) => (
-          <ProjectItem
-            key={project.id}
-            project={project}
-            activeSessionId={activeSessionId}
-            onSelectSession={onSelectSession}
-            onAddSession={() => onAddSession(project.id)}
-            onRemoveSession={onRemoveSession}
-            onRenameSession={onRenameSession}
-            onReorderSessions={onReorderSessions}
-            onReorderGroupSessions={onReorderGroupSessions}
-            sessionActivity={sessionActivity}
-            sessionServerUrls={sessionServerUrls}
-            onRemoveProject={() => onRemoveProject(project.id)}
-            selectedSessionIds={selectedSessionIds}
-            onToggleSelectSession={onToggleSelectSession}
-            sessionGroups={sessionGroups}
-            onGroupSessions={onGroupSessions}
-            onUngroupSessions={onUngroupSessions}
-            onRenameGroup={onRenameGroup}
-            onSetGroupLayout={onSetGroupLayout}
-            activeGroupId={activeGroupId}
-            dropTarget={dropProject?.index === index ? dropProject.position : null}
-            onProjectDragStart={() => { dragProjectIndexRef.current = index; }}
-            onProjectDragOver={(e) => handleProjectDragOver(e, index)}
-            onProjectDrop={() => handleProjectDrop(index)}
-            onProjectDragEnd={() => {
-              dragProjectIndexRef.current = null;
-              setDropProject(null);
-            }}
-          />
-        ))}
+        {focusedProjectId && visibleProjects.length === 0 && activeProjects.length > 0 && (
+          <div style={{ margin: '8px 6px', color: 'var(--text-muted)', fontSize: 12 }}>
+            Focused project is unavailable.
+          </div>
+        )}
+        {visibleProjects.map(renderProject)}
+        {archivedProjects.length > 0 && !focusedProjectId && (
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+            <button
+              onClick={() => setArchivedExpanded((prev) => !prev)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+              }}
+            >
+              <span>Archived</span>
+              <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: archivedExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }}>
+                <path d="M2 3L5 6L8 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              </svg>
+            </button>
+            {archivedExpanded && archivedProjects.map(renderProject)}
+          </div>
+        )}
       </div>
 
-      {/* Update + Settings buttons */}
       <div style={{
         padding: '8px 14px',
       }}>
         <UpdateButton />
       </div>
+      {focusedProjectId && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <button
+            onClick={onExitFocusMode}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 0',
+              color: 'var(--text-secondary)',
+              fontSize: 12,
+              width: '100%',
+            }}
+          >
+            Exit Focus Mode
+          </button>
+        </div>
+      )}
       <div style={{
         padding: '0 14px 8px',
       }}>
@@ -249,14 +350,13 @@ function UpdateButton() {
 
   useEffect(() => {
     const removeListener = window.electronAPI.updater.onStatus((s) => {
-      // Only allow forward transitions: idle → downloading → ready. Don't regress.
+      // Only allow forward transitions: idle -> downloading -> ready. Don't regress.
       setStatus((prev) => {
         if (prev === 'ready') return prev;
         if (prev === 'downloading' && s !== 'ready') return prev;
         return s;
       });
     });
-    // Check on mount
     window.electronAPI.updater.check();
     return removeListener;
   }, []);
@@ -283,7 +383,7 @@ function UpdateButton() {
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
         <path d="M8 2v9M5 8l3 3 3-3M3 13h10" />
       </svg>
-      {status === 'downloading' ? 'Downloading update...' : 'Update available — click to restart'}
+      {status === 'downloading' ? 'Downloading update...' : 'Update available - click to restart'}
     </button>
   );
 }
